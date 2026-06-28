@@ -2,6 +2,10 @@ const STORAGE_KEY = "acai-fast-food-stock-v1";
 const MOVEMENTS_KEY = "acai-fast-food-movements-v1";
 const PURCHASE_SELECTION_KEY = "acai-fast-food-purchase-selection-v1";
 const EXPIRING_DAYS = 7;
+const WHATSAPP_RECIPIENTS = [
+  { label: "WhatsApp 1", phone: "351913163878" },
+  { label: "WhatsApp 2", phone: "351912125244" },
+];
 
 let items = load(STORAGE_KEY, []);
 let movements = load(MOVEMENTS_KEY, []);
@@ -51,6 +55,7 @@ const elements = {
   resetRevenueFormButton: document.querySelector("#resetRevenueFormButton"),
   refreshRevenueButton: document.querySelector("#refreshRevenueButton"),
   revenueFeedback: document.querySelector("#revenueFeedback"),
+  revenueWhatsappShare: document.querySelector("#revenueWhatsappShare"),
   revenueList: document.querySelector("#revenueList"),
   userForm: document.querySelector("#userForm"),
   userId: document.querySelector("#userId"),
@@ -299,6 +304,7 @@ async function fetchRevenueRecords() {
 async function saveRevenueRecord(event) {
   event.preventDefault();
   const payload = getRevenuePayload();
+  hideRevenueWhatsappShare();
   elements.revenueFeedback.textContent = "A guardar faturação...";
 
   try {
@@ -312,6 +318,7 @@ async function saveRevenueRecord(event) {
     revenueRecords = result.records || [];
     renderRevenueRecords();
     resetRevenueForm();
+    renderRevenueWhatsappShare(result.record, result.notion);
     if (result.notion?.synced) {
       elements.revenueFeedback.textContent = "Faturação guardada e sincronizada com o Notion.";
     } else if (result.notion?.configured === false) {
@@ -394,6 +401,103 @@ function renderRevenueRecords() {
   }
 }
 
+function renderRevenueWhatsappShare(record, notion) {
+  if (!elements.revenueWhatsappShare) return;
+  const message = buildRevenueWhatsappMessage(record, notion);
+  if (!message || WHATSAPP_RECIPIENTS.length === 0) return;
+
+  const buttons = WHATSAPP_RECIPIENTS.map((recipient) => {
+    const href = `https://wa.me/${recipient.phone}?text=${encodeURIComponent(message)}`;
+    return `<a class="button whatsapp-button" href="${href}" target="_blank" rel="noopener">${escapeHtml(recipient.label)}</a>`;
+  }).join("");
+
+  elements.revenueWhatsappShare.innerHTML = `
+    <div>
+      <strong>Enviar resumo por WhatsApp</strong>
+      <span>A mensagem da faturação está pronta. Abre cada contacto e confirma o envio.</span>
+    </div>
+    <div class="row-actions">${buttons}</div>
+  `;
+  elements.revenueWhatsappShare.hidden = false;
+}
+
+function hideRevenueWhatsappShare() {
+  if (!elements.revenueWhatsappShare) return;
+  elements.revenueWhatsappShare.hidden = true;
+  elements.revenueWhatsappShare.innerHTML = "";
+}
+
+function buildRevenueWhatsappMessage(record, notion) {
+  if (!record) return "";
+
+  const receivedTotal =
+    numberValue(record.grossTotal) ||
+    numberValue(record.coins) +
+      numberValue(record.mbway) +
+      numberValue(record.uberEats) +
+      numberValue(record.glovo) +
+      numberValue(record.bolt) +
+      numberValue(record.multibanco) +
+      numberValue(record.cash);
+  const extraExpenses = (Array.isArray(record.expenses) ? record.expenses : [])
+    .map((expense, index) => {
+      const description = String(expense.description || "").trim();
+      return {
+        description: description || `Despesa ${index + 1}`,
+        hasDescription: Boolean(description),
+        amount: numberValue(expense.amount),
+      };
+    })
+    .filter((expense) => expense.hasDescription || expense.amount > 0);
+  const expenseTotal =
+    numberValue(record.expenseTotal) ||
+    numberValue(record.fuel) + extraExpenses.reduce((total, expense) => total + expense.amount, 0);
+  const netTotal = numberValue(record.netTotal) || receivedTotal - expenseTotal;
+  const notes = Array.isArray(record.dayNotes) && record.dayNotes.length ? record.dayNotes.join(", ") : "Sem observação";
+  const notionStatus = notion?.synced ? "sincronizado" : "não sincronizado";
+
+  const lines = [
+    `Faturação diária - ${formatDate(record.date)}`,
+    record.updatedAt ? `Registado em: ${formatDateTime(record.updatedAt)}` : "",
+    "",
+    "Recebimentos:",
+    `- Moedas: ${formatCurrency(numberValue(record.coins))}`,
+    `- MBWAY: ${formatCurrency(numberValue(record.mbway))}`,
+    `- Uber Eats: ${formatCurrency(numberValue(record.uberEats))}`,
+    `- Glovo: ${formatCurrency(numberValue(record.glovo))}`,
+    `- Bolt: ${formatCurrency(numberValue(record.bolt))}`,
+    `- Multibanco: ${formatCurrency(numberValue(record.multibanco))}`,
+    `- Dinheiro: ${formatCurrency(numberValue(record.cash))}`,
+    `Total faturação: ${formatCurrency(receivedTotal)}`,
+    "",
+    "Despesas:",
+    `- Combustível: ${formatCurrency(numberValue(record.fuel))}`,
+  ];
+
+  if (extraExpenses.length) {
+    for (const expense of extraExpenses) {
+      lines.push(`- ${expense.description}: ${formatCurrency(expense.amount)}`);
+    }
+  } else {
+    lines.push("- Sem despesas adicionais");
+  }
+
+  lines.push(
+    `Total despesas: ${formatCurrency(expenseTotal)}`,
+    `Total líquido: ${formatCurrency(netTotal)}`,
+    "",
+    `Qtd de pedidos: ${formatNumber(numberValue(record.orders))}`,
+    `Obs do dia: ${notes}`,
+  );
+
+  if (record.otherObservation) {
+    lines.push(`Observação: ${record.otherObservation}`);
+  }
+
+  lines.push(`Notion: ${notionStatus}`);
+  return lines.filter(Boolean).join("\n");
+}
+
 function handleRevenueAction(event) {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
@@ -427,6 +531,7 @@ function fillRevenueForm(id) {
   elements.revenueOtherObservation.value = record.otherObservation || "";
   updateRevenueTotals();
   elements.revenueFeedback.textContent = `A editar faturação de ${formatDate(record.date)}.`;
+  hideRevenueWhatsappShare();
   elements.revenueDate.focus();
 }
 
@@ -450,6 +555,7 @@ async function deleteRevenueRecord(id) {
     if (!response.ok) throw new Error(result.error || "Falha ao apagar faturação.");
     revenueRecords = result.records || [];
     renderRevenueRecords();
+    hideRevenueWhatsappShare();
     elements.revenueFeedback.textContent = "Registo de faturação apagado.";
   } catch (error) {
     elements.revenueFeedback.textContent = error.message || "Erro ao apagar faturação.";
