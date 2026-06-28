@@ -36,8 +36,8 @@ const PROPERTY_NAMES = {
   product: process.env.NOTION_PROPERTY_PRODUCT || "Produto",
   category: process.env.NOTION_PROPERTY_CATEGORY || "Categoria",
   unit: process.env.NOTION_PROPERTY_UNIT || "Unidade",
-  quantity: process.env.NOTION_PROPERTY_QUANTITY || "Quantidade",
-  minimum: process.env.NOTION_PROPERTY_MINIMUM || "Estoque minimo",
+  quantity: process.env.NOTION_PROPERTY_QUANTITY || "Estoque atual",
+  minimum: process.env.NOTION_PROPERTY_MINIMUM || "Mínimo Semanal",
   dailyMinimum: process.env.NOTION_PROPERTY_DAILY_MINIMUM || "Mínimo Diário",
   orderQuantity: process.env.NOTION_PROPERTY_ORDER_QUANTITY || "Quantidade a Comprar ",
   shouldBuy: process.env.NOTION_PROPERTY_SHOULD_BUY || "Comprar?",
@@ -49,6 +49,14 @@ const PROPERTY_NAMES = {
   status: process.env.NOTION_PROPERTY_STATUS || "Estado",
   notes: process.env.NOTION_PROPERTY_NOTES || "Observacoes",
   updatedAt: process.env.NOTION_PROPERTY_UPDATED_AT || "Atualizado em",
+};
+
+const PROPERTY_ALIASES = {
+  quantity: ["Estoque atual", "Quantidade"],
+  minimum: ["Mínimo Semanal", "Minimo Semanal", "Estoque minimo", "Estoque mínimo"],
+  dailyMinimum: ["Mínimo Diário", "Minimo Diario"],
+  orderQuantity: ["Quantidade a Comprar ", "Quantidade a Comprar"],
+  controlType: ["Tipo de controle ", "Tipo de controle"],
 };
 
 const MIME_TYPES = {
@@ -437,24 +445,25 @@ async function queryDataSourcePages(dataSourceId) {
 
 function pageToItem(page, properties, titlePropertyName) {
   const pageProperties = page.properties || {};
+  const getProperty = (key) => pageProperties[notionPropertyName(key, pageProperties)];
 
   return normalizeItem({
     id: page.id,
     name: propertyText(pageProperties[titlePropertyName]),
-    category: propertyText(pageProperties[PROPERTY_NAMES.category]) || "Outros",
-    unit: propertyText(pageProperties[PROPERTY_NAMES.unit]) || "un",
-    quantity: propertyNumber(pageProperties[PROPERTY_NAMES.quantity]),
-    minimum: propertyNumber(pageProperties[PROPERTY_NAMES.minimum]),
-    dailyMinimum: propertyNumber(pageProperties[PROPERTY_NAMES.dailyMinimum]),
-    orderQuantity: propertyNumber(pageProperties[PROPERTY_NAMES.orderQuantity]),
-    shouldBuy: propertyText(pageProperties[PROPERTY_NAMES.shouldBuy]),
-    unitCost: propertyNumber(pageProperties[PROPERTY_NAMES.unitCost]),
-    expiresAt: propertyDate(pageProperties[PROPERTY_NAMES.expiresAt]),
-    supplier: propertyText(pageProperties[PROPERTY_NAMES.supplier]),
-    orderDay: propertyText(pageProperties[PROPERTY_NAMES.orderDay]),
-    controlType: propertyText(pageProperties[PROPERTY_NAMES.controlType]),
-    notes: propertyText(pageProperties[PROPERTY_NAMES.notes]),
-    updatedAt: propertyDate(pageProperties[PROPERTY_NAMES.updatedAt]) || page.last_edited_time || new Date().toISOString(),
+    category: propertyText(getProperty("category")) || "Outros",
+    unit: propertyText(getProperty("unit")) || "un",
+    quantity: propertyNumber(getProperty("quantity")),
+    minimum: propertyNumber(getProperty("minimum")),
+    dailyMinimum: propertyNumber(getProperty("dailyMinimum")),
+    orderQuantity: propertyNumber(getProperty("orderQuantity")),
+    shouldBuy: propertyText(getProperty("shouldBuy")),
+    unitCost: propertyNumber(getProperty("unitCost")),
+    expiresAt: propertyDate(getProperty("expiresAt")),
+    supplier: propertyText(getProperty("supplier")),
+    orderDay: propertyText(getProperty("orderDay")),
+    controlType: propertyText(getProperty("controlType")),
+    notes: propertyText(getProperty("notes")),
+    updatedAt: propertyDate(getProperty("updatedAt")) || page.last_edited_time || new Date().toISOString(),
   });
 }
 
@@ -615,24 +624,23 @@ async function findPageByTitle(dataSourceId, titlePropertyName, title) {
 }
 
 function buildNotionProperties(item, databaseProperties, titlePropertyName, skippedProperties) {
-  const values = {
-    [PROPERTY_NAMES.product]: item.name,
-    [PROPERTY_NAMES.category]: item.category,
-    [PROPERTY_NAMES.unit]: item.unit,
-    [PROPERTY_NAMES.quantity]: item.quantity,
-    [PROPERTY_NAMES.minimum]: item.minimum,
-    [PROPERTY_NAMES.dailyMinimum]: item.dailyMinimum,
-    [PROPERTY_NAMES.orderQuantity]: item.orderQuantity,
-    [PROPERTY_NAMES.shouldBuy]: item.shouldBuy,
-    [PROPERTY_NAMES.unitCost]: item.unitCost,
-    [PROPERTY_NAMES.expiresAt]: item.expiresAt,
-    [PROPERTY_NAMES.supplier]: item.supplier,
-    [PROPERTY_NAMES.orderDay]: item.orderDay,
-    [PROPERTY_NAMES.controlType]: item.controlType,
-    [PROPERTY_NAMES.status]: item.status,
-    [PROPERTY_NAMES.notes]: item.notes,
-    [PROPERTY_NAMES.updatedAt]: item.updatedAt,
-  };
+  const values = {};
+  setNotionPropertyValue(values, databaseProperties, "product", item.name);
+  setNotionPropertyValue(values, databaseProperties, "category", item.category);
+  setNotionPropertyValue(values, databaseProperties, "unit", item.unit);
+  setNotionPropertyValue(values, databaseProperties, "quantity", item.quantity);
+  setNotionPropertyValue(values, databaseProperties, "minimum", item.minimum);
+  setNotionPropertyValue(values, databaseProperties, "dailyMinimum", item.dailyMinimum);
+  setNotionPropertyValue(values, databaseProperties, "orderQuantity", item.orderQuantity);
+  setNotionPropertyValue(values, databaseProperties, "shouldBuy", item.shouldBuy);
+  setNotionPropertyValue(values, databaseProperties, "unitCost", item.unitCost);
+  setNotionPropertyValue(values, databaseProperties, "expiresAt", item.expiresAt);
+  setNotionPropertyValue(values, databaseProperties, "supplier", item.supplier);
+  setNotionPropertyValue(values, databaseProperties, "orderDay", item.orderDay);
+  setNotionPropertyValue(values, databaseProperties, "controlType", item.controlType);
+  setNotionPropertyValue(values, databaseProperties, "status", item.status);
+  setNotionPropertyValue(values, databaseProperties, "notes", item.notes);
+  setNotionPropertyValue(values, databaseProperties, "updatedAt", item.updatedAt);
 
   values[titlePropertyName] = item.name;
 
@@ -653,6 +661,15 @@ function buildNotionProperties(item, databaseProperties, titlePropertyName, skip
   }
 
   return notionProperties;
+}
+
+function setNotionPropertyValue(values, databaseProperties, key, value) {
+  values[notionPropertyName(key, databaseProperties)] = value;
+}
+
+function notionPropertyName(key, properties) {
+  const candidates = [PROPERTY_NAMES[key], ...(PROPERTY_ALIASES[key] || [])].filter(Boolean);
+  return candidates.find((name) => properties[name]) || PROPERTY_NAMES[key];
 }
 
 function serializeProperty(type, value) {
