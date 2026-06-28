@@ -563,7 +563,7 @@ function renderCountRecords(records) {
             <input data-record-id="${escapeHtml(record.id)}" data-record-item-id="${escapeHtml(item.id)}" type="checkbox" ${item.requested ? "checked" : ""} />
             <span>
               <strong>${escapeHtml(item.name)}</strong>
-              <small>${formatNumber(item.quantity)} ${escapeHtml(item.unit)}${item.requested ? " | solicitado" : ""}</small>
+              <small>${formatNumber(item.quantity)} ${escapeHtml(item.unit)}${item.expiresAt ? ` | validade ${formatDate(item.expiresAt)}` : ""}${item.requested ? " | solicitado" : ""}</small>
             </span>
           </label>
         `,
@@ -649,7 +649,7 @@ function buildCountRecordNoteText(record) {
   ];
 
   for (const item of list) {
-    lines.push(`${item.requested ? "☑" : "☐"} ${item.name}: ${formatNumber(item.quantity)} ${item.unit}`);
+    lines.push(`${item.requested ? "☑" : "☐"} ${item.name}: ${formatNumber(item.quantity)} ${item.unit}${item.expiresAt ? ` | validade ${formatDate(item.expiresAt)}` : ""}`);
   }
 
   if (requestedItems.length === 0) {

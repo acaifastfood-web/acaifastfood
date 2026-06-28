@@ -195,7 +195,8 @@ function renderCountList() {
     for (const item of group.items) {
       const row = document.createElement("article");
       const minimumCells = renderMinimumCells(item);
-      row.className = `count-row${isLowStock(item) ? " low-stock-row" : ""}`;
+      const expiryField = renderExpiryField(item);
+      row.className = `count-row${expiryField ? " has-expiry-field" : ""}${isLowStock(item) ? " low-stock-row" : ""}`;
       row.innerHTML = `
         <div class="count-product">
           <strong>${escapeHtml(item.name)}</strong>
@@ -210,6 +211,7 @@ function renderCountList() {
           Contagem
           <input data-count-id="${escapeHtml(item.id)}" type="number" inputmode="numeric" min="0" step="1" placeholder="${formatNumber(item.quantity)}" />
         </label>
+        ${expiryField}
       `;
       rows.appendChild(row);
     }
@@ -239,6 +241,16 @@ function renderMinimumCells(item) {
     `);
   }
   return cells.join("");
+}
+
+function renderExpiryField(item) {
+  if (!needsExpiryDate(item)) return "";
+  return `
+    <label class="count-input count-expiry">
+      Validade
+      <input data-expiry-id="${escapeHtml(item.id)}" type="date" value="${escapeHtml(item.expiresAt || "")}" />
+    </label>
+  `;
 }
 
 function getFilteredItems() {
@@ -306,30 +318,35 @@ async function saveDailyCounts() {
   hideWhatsappShare();
 
   const inputs = [...elements.countList.querySelectorAll("[data-count-id]")];
+  const expiryInputs = [...elements.countList.querySelectorAll("[data-expiry-id]")];
   const countDate = elements.countDate.value || todayText;
   const updates = inputs
     .map((input) => ({
       input,
+      expiryInput: expiryInputs.find((entry) => entry.dataset.expiryId === input.dataset.countId),
       item: items.find((entry) => entry.id === input.dataset.countId),
       value: input.value.trim(),
     }))
-    .filter((entry) => entry.item && entry.value !== "");
+    .filter((entry) => entry.item && (entry.value !== "" || getExpiryValue(entry.expiryInput) !== entry.item.expiresAt));
 
   if (updates.length === 0) {
-    setSyncStatus("Nenhuma contagem preenchida.", "warning");
+    setSyncStatus("Nenhuma alteracao preenchida.", "warning");
     return;
   }
 
   const countedItems = [];
   for (const update of updates) {
-    const counted = wholeQuantity(update.value);
+    const hasCount = update.value !== "";
+    const counted = hasCount ? wholeQuantity(update.value) : update.item.quantity;
     const previous = update.item.quantity;
+    const expiresAt = getExpiryValue(update.expiryInput);
     const nextItem = { ...update.item, quantity: counted };
     countedItems.push({
       name: update.item.name,
       quantity: counted,
       previousQuantity: previous,
       unit: update.item.unit,
+      expiresAt,
       supplier: update.item.supplier,
       minimum: update.item.minimum,
       dailyMinimum: update.item.dailyMinimum,
@@ -337,6 +354,7 @@ async function saveDailyCounts() {
       lowStock: isLowStock(nextItem),
     });
     update.item.quantity = counted;
+    update.item.expiresAt = expiresAt;
     update.item.updatedAt = new Date().toISOString();
     update.input.value = "";
     movements.unshift({
@@ -346,7 +364,7 @@ async function saveDailyCounts() {
       type: "count",
       quantity: counted,
       unit: update.item.unit,
-      reason: `Contagem ${formatDate(countDate)} | anterior ${formatNumber(previous)} ${update.item.unit}`,
+      reason: `Contagem ${formatDate(countDate)} | anterior ${formatNumber(previous)} ${update.item.unit}${expiresAt ? ` | validade ${formatDate(expiresAt)}` : ""}`,
       createdAt: new Date().toISOString(),
     });
   }
@@ -354,7 +372,7 @@ async function saveDailyCounts() {
 
   persist();
   renderCountList();
-  setSyncStatus(`${updates.length} contagens guardadas. A enviar ao Notion...`, "warning");
+  setSyncStatus(`${updates.length} alteracoes guardadas. A enviar ao Notion...`, "warning");
 
   try {
     const response = await fetch("/api/notion/sync", {
@@ -371,7 +389,7 @@ async function saveDailyCounts() {
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Falha na sincronizacao");
-    setSyncStatus(`${updates.length} contagens guardadas e sincronizadas.`, "success");
+    setSyncStatus(`${updates.length} alteracoes guardadas e sincronizadas.`, "success");
     renderWhatsappShare(buildWhatsappMessage(countDate, countedItems));
   } catch (error) {
     setSyncStatus(error.message || "Contagens guardadas nesta app, mas nao sincronizadas.", "error");
@@ -421,7 +439,7 @@ function buildWhatsappMessage(countDate, countedItems) {
 
   lines.push("Produtos preenchidos:");
   for (const item of countedItems) {
-    lines.push(`- ${item.name}: ${formatNumber(item.quantity)} ${item.unit}${item.lowStock ? " | abaixo do minimo" : ""}`);
+    lines.push(`- ${item.name}: ${formatNumber(item.quantity)} ${item.unit}${item.expiresAt ? ` | validade ${formatDate(item.expiresAt)}` : ""}${item.lowStock ? " | abaixo do minimo" : ""}`);
   }
 
   return lines.join("\n");
@@ -444,6 +462,18 @@ function normalizeItem(item) {
     notes: item.notes || "",
     updatedAt: item.updatedAt || new Date().toISOString(),
   };
+}
+
+function needsExpiryDate(item) {
+  const normalized = `${item.name} ${item.category}`
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return /\bbolos?\b/.test(normalized);
+}
+
+function getExpiryValue(input) {
+  return input?.value ? input.value.slice(0, 10) : "";
 }
 
 function supplierLabel(item) {

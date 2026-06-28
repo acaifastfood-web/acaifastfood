@@ -408,6 +408,7 @@ function buildCountRecord(rawRecord, session) {
       quantity: numberValue(item.quantity),
       unit: String(item.unit || ""),
       previousQuantity: numberValue(item.previousQuantity),
+      expiresAt: String(item.expiresAt || "").slice(0, 10),
       requested: false,
       requestedAt: "",
     })),
@@ -1009,6 +1010,10 @@ function readCountRecords() {
         }
         if (!("requestedAt" in item)) {
           item.requestedAt = "";
+          changed = true;
+        }
+        if (!("expiresAt" in item)) {
+          item.expiresAt = "";
           changed = true;
         }
       }

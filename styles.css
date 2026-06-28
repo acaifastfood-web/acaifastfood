@@ -954,6 +954,10 @@ dialog::backdrop {
   padding: 12px;
 }
 
+.count-row.has-expiry-field {
+  grid-template-columns: minmax(220px, 1fr) 92px minmax(190px, 240px) 180px 150px;
+}
+
 .count-row:last-child {
   border-bottom: 0;
 }
@@ -1036,6 +1040,7 @@ dialog::backdrop {
   .summary-grid,
   .manager-sidebar,
   .count-row,
+  .count-row.has-expiry-field,
   .count-minimum-stack,
   .field-row,
   .user-form,
