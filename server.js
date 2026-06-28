@@ -778,7 +778,7 @@ async function resolveDataSource(configuredId) {
       title: getRichTextTitle(dataSource.title) || configuredId,
     };
   } catch (error) {
-    if (!error.message.includes("Could not find data source")) throw error;
+    if (!isMissingNotionDataSourceError(error.message)) throw error;
   }
 
   try {
@@ -960,8 +960,8 @@ function friendlyNotionError(message) {
     return "O NOTION_DATABASE_ID no .env e de uma pagina, nao da database. Abre a database como pagina inteira e copia o ID da propria database.";
   }
 
-  if (message.includes("Could not find database")) {
-    return "Nao encontrei essa database no Notion. Confirma o NOTION_DATABASE_ID e se a database foi partilhada com a integracao.";
+  if (message.includes("Could not find database") || isMissingNotionDataSourceError(message)) {
+    return "Nao encontrei essa database no Notion. Confirma o ID e se a database foi partilhada com a integracao.";
   }
 
   if (message.includes("Unauthorized") || message.includes("API token is invalid")) {
@@ -969,6 +969,10 @@ function friendlyNotionError(message) {
   }
 
   return message || "Nao foi possivel sincronizar com o Notion.";
+}
+
+function isMissingNotionDataSourceError(message) {
+  return String(message || "").includes("Could not find data source") || String(message || "").includes("Could not find data_source");
 }
 
 function serveStatic(request, response) {
