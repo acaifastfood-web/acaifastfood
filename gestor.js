@@ -1,0 +1,1148 @@
+const STORAGE_KEY = "acai-fast-food-stock-v1";
+const MOVEMENTS_KEY = "acai-fast-food-movements-v1";
+const PURCHASE_SELECTION_KEY = "acai-fast-food-purchase-selection-v1";
+const EXPIRING_DAYS = 7;
+
+let items = load(STORAGE_KEY, []);
+let movements = load(MOVEMENTS_KEY, []);
+let selectedPurchaseIds = new Set(load(PURCHASE_SELECTION_KEY, []));
+let countRecords = [];
+
+const elements = {
+  form: document.querySelector("#itemForm"),
+  itemId: document.querySelector("#itemId"),
+  formTitle: document.querySelector("#formTitle"),
+  resetFormButton: document.querySelector("#resetFormButton"),
+  inventoryBody: document.querySelector("#inventoryBody"),
+  rowTemplate: document.querySelector("#rowTemplate"),
+  emptyState: document.querySelector("#emptyState"),
+  searchInput: document.querySelector("#searchInput"),
+  statusFilter: document.querySelector("#statusFilter"),
+  categoryFilter: document.querySelector("#categoryFilter"),
+  clearFiltersButton: document.querySelector("#clearFiltersButton"),
+  managerCountInfo: document.querySelector("#managerCountInfo"),
+  totalItems: document.querySelector("#totalItems"),
+  lowStockItems: document.querySelector("#lowStockItems"),
+  expiringItems: document.querySelector("#expiringItems"),
+  stockValue: document.querySelector("#stockValue"),
+  userForm: document.querySelector("#userForm"),
+  userId: document.querySelector("#userId"),
+  userName: document.querySelector("#userName"),
+  userUsername: document.querySelector("#userUsername"),
+  userSector: document.querySelector("#userSector"),
+  userRole: document.querySelector("#userRole"),
+  userPassword: document.querySelector("#userPassword"),
+  userActive: document.querySelector("#userActive"),
+  resetUserFormButton: document.querySelector("#resetUserFormButton"),
+  refreshUsersButton: document.querySelector("#refreshUsersButton"),
+  userFeedback: document.querySelector("#userFeedback"),
+  userList: document.querySelector("#userList"),
+  purchaseList: document.querySelector("#purchaseList"),
+  purchaseCountInfo: document.querySelector("#purchaseCountInfo"),
+  selectedPurchaseInfo: document.querySelector("#selectedPurchaseInfo"),
+  purchaseOutput: document.querySelector("#purchaseOutput"),
+  selectAllPurchasesButton: document.querySelector("#selectAllPurchasesButton"),
+  clearPurchasesButton: document.querySelector("#clearPurchasesButton"),
+  copyPurchasesButton: document.querySelector("#copyPurchasesButton"),
+  movementList: document.querySelector("#movementList"),
+  movementDialog: document.querySelector("#movementDialog"),
+  movementForm: document.querySelector("#movementForm"),
+  movementTitle: document.querySelector("#movementTitle"),
+  movementItemId: document.querySelector("#movementItemId"),
+  movementType: document.querySelector("#movementType"),
+  movementQuantity: document.querySelector("#movementQuantity"),
+  movementReason: document.querySelector("#movementReason"),
+  templateButton: document.querySelector("#templateButton"),
+  pullButton: document.querySelector("#pullButton"),
+  syncButton: document.querySelector("#syncButton"),
+  syncBanner: document.querySelector("#syncBanner"),
+  syncStatus: document.querySelector("#syncStatus"),
+  exportButton: document.querySelector("#exportButton"),
+  importFile: document.querySelector("#importFile"),
+  clearMovementsButton: document.querySelector("#clearMovementsButton"),
+  refreshCountRecordsButton: document.querySelector("#refreshCountRecordsButton"),
+  countRecordList: document.querySelector("#countRecordList"),
+  sidebarButtons: document.querySelectorAll("[data-view-target]"),
+  managerViews: document.querySelectorAll("[data-view]"),
+};
+
+elements.sidebarButtons.forEach((button) => {
+  button.addEventListener("click", () => setManagerView(button.dataset.viewTarget));
+});
+elements.form.addEventListener("submit", saveItem);
+elements.resetFormButton.addEventListener("click", resetForm);
+elements.searchInput.addEventListener("input", render);
+elements.statusFilter.addEventListener("change", render);
+elements.categoryFilter.addEventListener("change", render);
+elements.clearFiltersButton.addEventListener("click", clearManagerFilters);
+elements.inventoryBody.addEventListener("click", handleTableAction);
+elements.userForm.addEventListener("submit", saveUser);
+elements.resetUserFormButton.addEventListener("click", resetUserForm);
+elements.refreshUsersButton.addEventListener("click", fetchUsers);
+elements.userList.addEventListener("click", handleUserAction);
+elements.purchaseList.addEventListener("change", handlePurchaseSelection);
+elements.selectAllPurchasesButton.addEventListener("click", selectAllPurchases);
+elements.clearPurchasesButton.addEventListener("click", clearPurchaseSelection);
+elements.copyPurchasesButton.addEventListener("click", copySelectedPurchases);
+elements.movementForm.addEventListener("submit", applyMovement);
+elements.templateButton.addEventListener("click", downloadCsvTemplate);
+elements.pullButton.addEventListener("click", pullFromNotion);
+elements.syncButton.addEventListener("click", syncWithNotion);
+elements.exportButton.addEventListener("click", exportData);
+elements.importFile.addEventListener("change", importData);
+elements.clearMovementsButton.addEventListener("click", clearMovements);
+elements.refreshCountRecordsButton.addEventListener("click", fetchCountRecords);
+elements.countRecordList.addEventListener("change", handleCountRecordChange);
+elements.countRecordList.addEventListener("click", handleCountRecordClick);
+
+render();
+checkNotionStatus();
+fetchCountRecords();
+fetchUsers();
+
+setManagerView("resumo");
+
+function setManagerView(viewName) {
+  elements.managerViews.forEach((view) => {
+    view.hidden = view.dataset.view !== viewName;
+  });
+  elements.sidebarButtons.forEach((button) => {
+    button.classList.toggle("active", button.dataset.viewTarget === viewName);
+  });
+}
+
+function saveItem(event) {
+  event.preventDefault();
+  const formData = new FormData(elements.form);
+  const id = elements.itemId.value || crypto.randomUUID();
+  const item = normalizeItem({
+    id,
+    name: String(formData.get("name")).trim(),
+    category: formData.get("category"),
+    unit: formData.get("unit"),
+    quantity: formData.get("quantity"),
+    minimum: formData.get("minimum"),
+    dailyMinimum: formData.get("dailyMinimum"),
+    unitCost: formData.get("unitCost"),
+    expiresAt: formData.get("expiresAt") || "",
+    supplier: String(formData.get("supplier") || "").trim(),
+    orderDay: String(formData.get("orderDay") || "").trim(),
+    notes: String(formData.get("notes") || "").trim(),
+    updatedAt: new Date().toISOString(),
+  });
+
+  const existingIndex = items.findIndex((entry) => entry.id === id);
+  if (existingIndex >= 0) items[existingIndex] = item;
+  else items.unshift(item);
+
+  persist();
+  resetForm();
+  render();
+}
+
+function handleTableAction(event) {
+  const button = event.target.closest("button");
+  if (!button) return;
+
+  const row = button.closest("tr");
+  const item = items.find((entry) => entry.id === row.dataset.id);
+  if (!item) return;
+
+  if (button.dataset.action === "edit") fillForm(item);
+  if (button.dataset.action === "delete") deleteItem(item);
+  if (button.dataset.action === "move") openMovement(item);
+}
+
+function deleteItem(item) {
+  const confirmed = confirm(`Apagar "${item.name}" do estoque local?`);
+  if (!confirmed) return;
+
+  items = items.filter((entry) => entry.id !== item.id);
+  movements = movements.filter((entry) => entry.itemId !== item.id);
+  persist();
+  render();
+}
+
+function fillForm(item) {
+  elements.itemId.value = item.id;
+  elements.formTitle.textContent = "Editar item";
+  setField("name", item.name);
+  setField("category", item.category);
+  setField("unit", item.unit);
+  setField("quantity", item.quantity);
+  setField("minimum", item.minimum);
+  setField("dailyMinimum", item.dailyMinimum);
+  setField("unitCost", item.unitCost);
+  setField("expiresAt", item.expiresAt);
+  setField("supplier", item.supplier);
+  setField("orderDay", item.orderDay);
+  setField("notes", item.notes);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function resetForm() {
+  elements.form.reset();
+  elements.itemId.value = "";
+  elements.formTitle.textContent = "Novo item";
+  setField("category", "Ingredientes");
+  setField("unit", "kg");
+}
+
+function openMovement(item) {
+  elements.movementItemId.value = item.id;
+  elements.movementTitle.textContent = `Movimento: ${item.name}`;
+  elements.movementType.value = "in";
+  elements.movementQuantity.value = "";
+  elements.movementReason.value = "";
+  elements.movementDialog.showModal();
+}
+
+function applyMovement(event) {
+  event.preventDefault();
+  const item = items.find((entry) => entry.id === elements.movementItemId.value);
+  if (!item) return;
+
+  const quantity = numberValue(elements.movementQuantity.value);
+  const type = elements.movementType.value;
+  if (quantity <= 0) return;
+
+  const nextQuantity = type === "in" ? item.quantity + quantity : Math.max(0, item.quantity - quantity);
+  item.quantity = roundQuantity(nextQuantity);
+  item.updatedAt = new Date().toISOString();
+
+  movements.unshift({
+    id: crypto.randomUUID(),
+    itemId: item.id,
+    itemName: item.name,
+    type,
+    quantity,
+    unit: item.unit,
+    reason: elements.movementReason.value.trim(),
+    createdAt: new Date().toISOString(),
+  });
+  movements = movements.slice(0, 80);
+
+  persist();
+  elements.movementDialog.close();
+  render();
+}
+
+function render() {
+  renderSummary();
+  renderPurchaseSuggestions();
+  renderTable();
+  renderMovements();
+}
+
+function renderSummary() {
+  const lowStock = items.filter(isLowStock).length;
+  const expiring = items.filter(isExpiringSoon).length;
+  const value = items.reduce((total, item) => total + item.quantity * item.unitCost, 0);
+
+  elements.totalItems.textContent = String(items.length);
+  elements.lowStockItems.textContent = String(lowStock);
+  elements.expiringItems.textContent = String(expiring);
+  elements.stockValue.textContent = formatCurrency(value);
+}
+
+function renderTable() {
+  elements.inventoryBody.innerHTML = "";
+  const filteredItems = getFilteredItems();
+  elements.managerCountInfo.textContent = `${filteredItems.length} de ${items.length} produtos visiveis`;
+  elements.emptyState.hidden = filteredItems.length > 0;
+
+  for (const item of filteredItems) {
+    const row = elements.rowTemplate.content.firstElementChild.cloneNode(true);
+    const status = getStatus(item);
+    row.dataset.id = item.id;
+    row.querySelector('[data-field="name"]').textContent = item.name;
+    row.querySelector('[data-field="meta"]').textContent = [item.category, item.supplier, item.orderDay].filter(Boolean).join(" | ");
+    row.querySelector('[data-field="quantity"]').textContent = `${formatNumber(item.quantity)} ${item.unit}`;
+    row.querySelector('[data-field="minimum"]').innerHTML = `
+      <strong>${formatNumber(item.dailyMinimum)} ${escapeHtml(item.unit)}</strong>
+      <span>diario</span>
+      <strong>${formatNumber(item.minimum)} ${escapeHtml(item.unit)}</strong>
+      <span>semanal</span>
+    `;
+    row.querySelector('[data-field="expiresAt"]').textContent = formatDate(item.expiresAt);
+    const pill = row.querySelector('[data-field="status"]');
+    pill.textContent = status.label;
+    pill.classList.add(status.className);
+    elements.inventoryBody.appendChild(row);
+  }
+}
+
+async function fetchUsers() {
+  elements.userFeedback.textContent = "A carregar acessos...";
+
+  try {
+    const response = await fetch("/api/users");
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao carregar acessos.");
+    renderUsers(result.users || []);
+    elements.userFeedback.textContent = `${result.users?.length || 0} acessos cadastrados.`;
+  } catch (error) {
+    elements.userList.innerHTML = '<div class="empty-state"><h3>Sem acessos</h3><p>Nao foi possivel carregar os acessos.</p></div>';
+    elements.userFeedback.textContent = error.message || "Erro ao carregar acessos.";
+  }
+}
+
+function renderUsers(users) {
+  elements.userList.innerHTML = "";
+  if (users.length === 0) {
+    elements.userList.innerHTML = '<div class="empty-state"><h3>Sem acessos</h3><p>Cadastra o primeiro acesso acima.</p></div>';
+    return;
+  }
+
+  for (const sector of ["Gestao", "Sala", "Cozinha"]) {
+    const sectorUsers = users.filter((user) => user.sector === sector).sort((a, b) => a.name.localeCompare(b.name));
+    if (sectorUsers.length === 0) continue;
+
+    const section = document.createElement("section");
+    section.className = "user-sector";
+    section.innerHTML = `<h3>${sector}</h3>`;
+
+    for (const user of sectorUsers) {
+      const row = document.createElement("article");
+      row.className = `user-row${user.active ? "" : " paused"}`;
+      row.innerHTML = `
+        <div>
+          <strong>${escapeHtml(user.name)}</strong>
+          <span>${escapeHtml(user.username)}</span>
+        </div>
+        <div>
+          <strong>${escapeHtml(user.sector)}</strong>
+          <span>${user.role === "manager" ? "Gestor - acesso total" : "Funcionario"}</span>
+        </div>
+        <span class="status-pill ${user.active ? "status-ok" : "status-low"}">${user.active ? "Ativo" : "Pausado"}</span>
+        <div class="row-actions">
+          <button class="icon-button" data-action="edit-user" data-id="${escapeHtml(user.id)}" type="button">Editar</button>
+          <button class="icon-button" data-action="reset-user-password" data-id="${escapeHtml(user.id)}" type="button">Senha</button>
+          <button class="icon-button" data-action="toggle-user" data-id="${escapeHtml(user.id)}" data-active="${user.active ? "false" : "true"}" type="button">${user.active ? "Pausar" : "Ativar"}</button>
+          <button class="icon-button danger" data-action="delete-user" data-id="${escapeHtml(user.id)}" type="button">Excluir</button>
+        </div>
+      `;
+      row.dataset.user = JSON.stringify(user);
+      section.appendChild(row);
+    }
+
+    elements.userList.appendChild(section);
+  }
+}
+
+async function saveUser(event) {
+  event.preventDefault();
+  const payload = {
+    id: elements.userId.value,
+    name: elements.userName.value.trim(),
+    username: elements.userUsername.value.trim(),
+    sector: elements.userSector.value,
+    role: elements.userRole.value,
+    password: elements.userPassword.value,
+    active: elements.userActive.checked,
+  };
+
+  try {
+    const response = await fetch("/api/users/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao guardar acesso.");
+    renderUsers(result.users || []);
+    elements.userFeedback.textContent = `Acesso de ${payload.name} guardado.`;
+    resetUserForm();
+  } catch (error) {
+    elements.userFeedback.textContent = error.message || "Erro ao guardar acesso.";
+  }
+}
+
+function handleUserAction(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  const id = button.dataset.id;
+  if (button.dataset.action === "edit-user") return fillUserForm(button.closest(".user-row"));
+  if (button.dataset.action === "reset-user-password") return resetUserPassword(id);
+  if (button.dataset.action === "toggle-user") return toggleUser(id, button.dataset.active === "true");
+  if (button.dataset.action === "delete-user") return deleteUser(id);
+}
+
+function fillUserForm(row) {
+  if (!row?.dataset.user) return;
+  const user = JSON.parse(row.dataset.user);
+  elements.userId.value = user.id;
+  elements.userName.value = user.name;
+  elements.userUsername.value = user.username;
+  elements.userSector.value = user.sector;
+  elements.userRole.value = user.role || "employee";
+  elements.userPassword.value = "";
+  elements.userActive.checked = user.active;
+  elements.userFeedback.textContent = `A editar acesso de ${user.name}.`;
+  elements.userName.focus();
+}
+
+function resetUserForm() {
+  elements.userForm.reset();
+  elements.userId.value = "";
+  elements.userSector.value = "Sala";
+  elements.userRole.value = "employee";
+  elements.userActive.checked = true;
+}
+
+async function resetUserPassword(id) {
+  try {
+    const response = await fetch("/api/users/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao reiniciar senha.");
+    renderUsers(result.users || []);
+    elements.userFeedback.textContent = `Senha provisoria: ${result.temporaryPassword}`;
+  } catch (error) {
+    elements.userFeedback.textContent = error.message || "Erro ao reiniciar senha.";
+  }
+}
+
+async function toggleUser(id, active) {
+  try {
+    const response = await fetch("/api/users/toggle", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, active }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao alterar acesso.");
+    renderUsers(result.users || []);
+    elements.userFeedback.textContent = active ? "Acesso ativado." : "Acesso pausado.";
+  } catch (error) {
+    elements.userFeedback.textContent = error.message || "Erro ao alterar acesso.";
+  }
+}
+
+async function deleteUser(id) {
+  const confirmed = confirm("Excluir este funcionario e bloquear o acesso?");
+  if (!confirmed) return;
+
+  try {
+    const response = await fetch("/api/users/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao excluir funcionario.");
+    renderUsers(result.users || []);
+    elements.userFeedback.textContent = "Funcionario excluido.";
+  } catch (error) {
+    elements.userFeedback.textContent = error.message || "Erro ao excluir funcionario.";
+  }
+}
+
+function renderPurchaseSuggestions() {
+  const suggestions = getPurchaseSuggestions();
+  prunePurchaseSelection(suggestions);
+  const selectedSuggestions = suggestions.filter((item) => selectedPurchaseIds.has(item.id));
+  elements.purchaseCountInfo.textContent = `${suggestions.length} produtos sugeridos`;
+  elements.selectedPurchaseInfo.textContent = `${selectedSuggestions.length} selecionados`;
+  elements.selectAllPurchasesButton.disabled = suggestions.length === 0;
+  elements.clearPurchasesButton.disabled = selectedSuggestions.length === 0;
+  elements.copyPurchasesButton.disabled = selectedSuggestions.length === 0;
+
+  if (suggestions.length === 0) {
+    elements.purchaseList.innerHTML = '<div class="empty-state"><h3>Sem pedidos sugeridos</h3><p>Depois da contagem, os produtos abaixo do minimo aparecem aqui.</p></div>';
+    return;
+  }
+
+  const fragment = document.createDocumentFragment();
+  for (const group of groupBySupplier(suggestions)) {
+    const section = document.createElement("section");
+    section.className = "purchase-group";
+    const selectedInGroup = group.items.filter((item) => selectedPurchaseIds.has(item.id)).length;
+    section.innerHTML = `
+      <div class="purchase-heading">
+        <div>
+          <h3>${escapeHtml(group.supplier)}</h3>
+          <span>${group.items.length} produtos | ${selectedInGroup} selecionados</span>
+        </div>
+        <span class="order-pill">${escapeHtml(orderDaySummary(group.items))}</span>
+      </div>
+    `;
+
+    const rows = document.createElement("div");
+    rows.className = "purchase-items";
+    for (const item of group.items) {
+      const quantityToOrder = getQuantityToOrder(item);
+      const row = document.createElement("label");
+      row.className = "purchase-row";
+      row.innerHTML = `
+        <input data-purchase-id="${escapeHtml(item.id)}" type="checkbox" ${selectedPurchaseIds.has(item.id) ? "checked" : ""} />
+        <div class="purchase-product">
+          <strong>${escapeHtml(item.name)}</strong>
+          <span>${escapeHtml([item.category, item.orderDay].filter(Boolean).join(" | "))}</span>
+        </div>
+        <div class="purchase-numbers">
+          <span>Atual</span>
+          <strong>${formatNumber(item.quantity)} ${escapeHtml(item.unit)}</strong>
+        </div>
+        <div class="purchase-numbers">
+          <span>Comprar</span>
+          <strong>${formatNumber(quantityToOrder)} ${escapeHtml(item.unit)}</strong>
+        </div>
+        <div class="purchase-numbers">
+          <span>Min. semanal</span>
+          <strong>${formatNumber(item.minimum)} ${escapeHtml(item.unit)}</strong>
+        </div>
+      `;
+      rows.appendChild(row);
+    }
+
+    section.appendChild(rows);
+    fragment.appendChild(section);
+  }
+
+  elements.purchaseList.innerHTML = "";
+  elements.purchaseList.appendChild(fragment);
+}
+
+function renderMovements() {
+  elements.movementList.innerHTML = "";
+  if (movements.length === 0) {
+    elements.movementList.innerHTML = '<div class="empty-state"><h3>Sem movimentos</h3><p>Entradas, saidas e contagens aparecem aqui.</p></div>';
+    return;
+  }
+
+  for (const movement of movements.slice(0, 16)) {
+    const entry = document.createElement("article");
+    entry.className = "movement";
+    const label = movement.type === "in" ? "Entrada" : movement.type === "out" ? "Saida" : "Contagem";
+    entry.innerHTML = `
+      <span class="movement-type ${movement.type}">${label}</span>
+      <div>
+        <strong>${escapeHtml(movement.itemName)}</strong>
+        <small>${escapeHtml(movement.reason || "Sem motivo informado")}</small>
+      </div>
+      <small>${formatNumber(movement.quantity)} ${movement.unit} | ${formatDateTime(movement.createdAt)}</small>
+    `;
+    elements.movementList.appendChild(entry);
+  }
+}
+
+async function fetchCountRecords() {
+  elements.countRecordList.innerHTML = '<div class="empty-state"><h3>A carregar registos</h3></div>';
+
+  try {
+    const response = await fetch("/api/count-records");
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao carregar registos.");
+    countRecords = result.records || [];
+    renderCountRecords(countRecords);
+  } catch (error) {
+    elements.countRecordList.innerHTML = `<div class="empty-state"><h3>Sem registos</h3><p>${escapeHtml(error.message || "Nao foi possivel carregar o historico.")}</p></div>`;
+  }
+}
+
+function renderCountRecords(records) {
+  elements.countRecordList.innerHTML = "";
+  if (records.length === 0) {
+    elements.countRecordList.innerHTML = '<div class="empty-state"><h3>Sem registos</h3><p>Quando um funcionario guardar contagens, o historico aparece aqui.</p></div>';
+    return;
+  }
+
+  for (const record of records.slice(0, 60)) {
+    const entry = document.createElement("article");
+    entry.className = "count-record";
+    const items = Array.isArray(record.items) ? record.items : [];
+    const requestedCount = items.filter((item) => item.requested).length;
+    const itemRows = items
+      .map(
+        (item) => `
+          <label class="count-record-item${item.requested ? " requested" : ""}">
+            <input data-record-id="${escapeHtml(record.id)}" data-record-item-id="${escapeHtml(item.id)}" type="checkbox" ${item.requested ? "checked" : ""} />
+            <span>
+              <strong>${escapeHtml(item.name)}</strong>
+              <small>${formatNumber(item.quantity)} ${escapeHtml(item.unit)}${item.requested ? " | solicitado" : ""}</small>
+            </span>
+          </label>
+        `,
+      )
+      .join("");
+    entry.innerHTML = `
+      <div class="count-record-head">
+        <div>
+          <strong>${escapeHtml(record.employeeName || record.employeeUsername || "Funcionario")}</strong>
+          <span>${escapeHtml(record.employeeSector || "Sem setor")} | ${formatDate(record.countDate)} | ${formatDateTime(record.createdAt)}</span>
+        </div>
+        <button class="button ghost" data-action="share-count-record" data-record-id="${escapeHtml(record.id)}" type="button">Abrir no Notas</button>
+      </div>
+      <div class="count-record-products">
+        <strong>${record.itemCount || items.length} produtos preenchidos | ${requestedCount} solicitados</strong>
+        <div class="count-record-items">${itemRows}</div>
+      </div>
+    `;
+    elements.countRecordList.appendChild(entry);
+  }
+}
+
+async function handleCountRecordChange(event) {
+  const input = event.target.closest("[data-record-item-id]");
+  if (!input) return;
+  await updateCountRecordItemStatus(input.dataset.recordId, input.dataset.recordItemId, input.checked);
+}
+
+function handleCountRecordClick(event) {
+  const button = event.target.closest("button[data-action='share-count-record']");
+  if (!button) return;
+  shareCountRecordToNotes(button.dataset.recordId);
+}
+
+async function updateCountRecordItemStatus(recordId, itemId, requested) {
+  try {
+    const response = await fetch("/api/count-records/item-status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recordId, itemId, requested }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao atualizar produto.");
+    countRecords = result.records || [];
+    renderCountRecords(countRecords);
+  } catch (error) {
+    setSyncStatus(error.message || "Nao foi possivel marcar como solicitado.", "error");
+    fetchCountRecords();
+  }
+}
+
+async function shareCountRecordToNotes(recordId) {
+  const record = countRecords.find((entry) => entry.id === recordId);
+  if (!record) return;
+  const text = buildCountRecordNoteText(record);
+
+  try {
+    if (navigator.share) {
+      await navigator.share({
+        title: "Lista de produtos solicitados",
+        text,
+      });
+      setSyncStatus("Lista enviada. No iPhone, escolhe Notas; se necessario, toca no botao de checklist do Notas.", "success");
+      return;
+    }
+    await navigator.clipboard.writeText(text);
+    setSyncStatus("Lista copiada em formato checklist. No iPhone, cola no app Notas.", "success");
+  } catch {
+    await navigator.clipboard.writeText(text).catch(() => {});
+    setSyncStatus("Se o Notas nao abrir automaticamente, a checklist ficou preparada para copiar.", "warning");
+  }
+}
+
+function buildCountRecordNoteText(record) {
+  const items = Array.isArray(record.items) ? record.items : [];
+  const requestedItems = items.filter((item) => item.requested);
+  const list = requestedItems.length ? requestedItems : items;
+  const lines = [
+    `Lista de produtos - ${formatDate(record.countDate)}`,
+    `Responsavel: ${record.employeeName || record.employeeUsername || "Funcionario"}`,
+    `Setor: ${record.employeeSector || "Sem setor"}`,
+    "",
+  ];
+
+  for (const item of list) {
+    lines.push(`${item.requested ? "☑" : "☐"} ${item.name}: ${formatNumber(item.quantity)} ${item.unit}`);
+  }
+
+  if (requestedItems.length === 0) {
+    lines.push("", "Nenhum item foi marcado como solicitado ainda.");
+  }
+
+  return lines.join("\n");
+}
+
+function getPurchaseSuggestions() {
+  return items
+    .filter(shouldSuggestPurchase)
+    .sort((a, b) => {
+      const supplierOrder = supplierLabel(a).localeCompare(supplierLabel(b));
+      if (supplierOrder !== 0) return supplierOrder;
+      return b.minimum - b.quantity - (a.minimum - a.quantity) || a.name.localeCompare(b.name);
+    });
+}
+
+function shouldSuggestPurchase(item) {
+  return getQuantityToOrder(item) > 0 || isTruthyPurchaseFlag(item.shouldBuy);
+}
+
+function getQuantityToOrder(item) {
+  if (item.orderQuantity > 0) return item.orderQuantity;
+  if (item.quantity < item.minimum) return roundQuantity(item.minimum - item.quantity);
+  if (isTruthyPurchaseFlag(item.shouldBuy) && item.dailyMinimum > 0) return item.dailyMinimum;
+  return 0;
+}
+
+function isTruthyPurchaseFlag(value) {
+  const normalized = String(value || "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  return ["sim", "yes", "true", "comprar", "1"].includes(normalized);
+}
+
+function groupBySupplier(entries) {
+  const groups = new Map();
+  for (const item of entries) {
+    const supplier = supplierLabel(item);
+    if (!groups.has(supplier)) groups.set(supplier, []);
+    groups.get(supplier).push(item);
+  }
+  return [...groups.entries()].map(([supplier, groupItems]) => ({ supplier, items: groupItems }));
+}
+
+function supplierLabel(item) {
+  return item.supplier?.trim() || "Sem fornecedor";
+}
+
+function orderDaySummary(entries) {
+  const days = [...new Set(entries.map((item) => item.orderDay).filter(Boolean))];
+  if (days.length === 0) return "Sem dia definido";
+  if (days.length === 1) return days[0];
+  return days.join(", ");
+}
+
+function handlePurchaseSelection(event) {
+  const input = event.target.closest("[data-purchase-id]");
+  if (!input) return;
+  if (input.checked) selectedPurchaseIds.add(input.dataset.purchaseId);
+  else selectedPurchaseIds.delete(input.dataset.purchaseId);
+  persistPurchaseSelection();
+  renderPurchaseSuggestions();
+}
+
+function selectAllPurchases() {
+  for (const item of getPurchaseSuggestions()) selectedPurchaseIds.add(item.id);
+  persistPurchaseSelection();
+  renderPurchaseSuggestions();
+}
+
+function clearPurchaseSelection() {
+  selectedPurchaseIds.clear();
+  elements.purchaseOutput.hidden = true;
+  elements.purchaseOutput.value = "";
+  persistPurchaseSelection();
+  renderPurchaseSuggestions();
+}
+
+async function copySelectedPurchases() {
+  const selected = getPurchaseSuggestions().filter((item) => selectedPurchaseIds.has(item.id));
+  if (selected.length === 0) return;
+  const text = buildPurchaseText(selected);
+  elements.purchaseOutput.value = text;
+
+  try {
+    await navigator.clipboard.writeText(text);
+    elements.purchaseOutput.hidden = true;
+    setSyncStatus(`${selected.length} produtos copiados para a area de transferencia.`, "success");
+  } catch {
+    elements.purchaseOutput.hidden = false;
+    elements.purchaseOutput.focus();
+    elements.purchaseOutput.select();
+    copyTextFallback(text);
+    setSyncStatus(`${selected.length} produtos preparados abaixo para copiar manualmente.`, "warning");
+  }
+}
+
+function buildPurchaseText(selected) {
+  const lines = [`Relacao de pedidos - ${new Date().toLocaleDateString("pt-PT")}`];
+  for (const group of groupBySupplier(selected)) {
+    lines.push("", `Fornecedor: ${group.supplier}`);
+    for (const item of group.items) {
+      lines.push(`- ${item.name}: pedir ${formatNumber(getQuantityToOrder(item))} ${item.unit} (atual ${formatNumber(item.quantity)} | min. semanal ${formatNumber(item.minimum)})`);
+    }
+  }
+  return lines.join("\n");
+}
+
+function copyTextFallback(text) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
+function prunePurchaseSelection(suggestions) {
+  const validIds = new Set(suggestions.map((item) => item.id));
+  let changed = false;
+  for (const id of selectedPurchaseIds) {
+    if (!validIds.has(id)) {
+      selectedPurchaseIds.delete(id);
+      changed = true;
+    }
+  }
+  if (changed) persistPurchaseSelection();
+}
+
+function persistPurchaseSelection() {
+  localStorage.setItem(PURCHASE_SELECTION_KEY, JSON.stringify([...selectedPurchaseIds]));
+}
+
+function getFilteredItems() {
+  const term = elements.searchInput.value.trim().toLowerCase();
+  const status = elements.statusFilter.value;
+  const category = elements.categoryFilter.value;
+
+  return items
+    .filter((item) => {
+      const haystack = `${item.name} ${item.category} ${item.supplier} ${item.notes}`.toLowerCase();
+      return !term || haystack.includes(term);
+    })
+    .filter((item) => category === "all" || item.category === category)
+    .filter((item) => {
+      if (status === "all") return true;
+      if (status === "low") return isLowStock(item);
+      if (status === "expiring") return isExpiringSoon(item);
+      return !isLowStock(item) && !isExpiringSoon(item);
+    })
+    .sort((a, b) => getStatus(b).priority - getStatus(a).priority || a.name.localeCompare(b.name));
+}
+
+function clearManagerFilters() {
+  elements.searchInput.value = "";
+  elements.statusFilter.value = "all";
+  elements.categoryFilter.value = "all";
+  render();
+}
+
+async function checkNotionStatus() {
+  try {
+    const response = await fetch("/api/notion/status");
+    if (!response.ok) return;
+    const status = await response.json();
+    if (!status.configured) {
+      setSyncStatus("Configura o Notion no ficheiro .env para ativar a sincronizacao.", "warning");
+      return;
+    }
+    await pullFromNotion({ automatic: true });
+  } catch {
+    setSyncStatus("Abre a app pelo server.js para ativar a sincronizacao com Notion.", "warning");
+  }
+}
+
+async function pullFromNotion(options = {}) {
+  elements.pullButton.disabled = true;
+  setSyncStatus(options.automatic ? "A carregar base do Notion..." : "A carregar produtos do Notion...", "warning");
+
+  try {
+    const response = await fetch("/api/notion/items");
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao carregar do Notion");
+    items = result.items.map(normalizeItem);
+    persist();
+    render();
+    const database = result.databaseTitle ? ` de "${result.databaseTitle}"` : "";
+    const prefix = options.automatic ? "Base carregada automaticamente" : "Notion carregado";
+    setSyncStatus(`${prefix}${database}: ${items.length} produtos na app.`, "success");
+  } catch (error) {
+    setSyncStatus(error.message || "Nao foi possivel carregar do Notion.", "error");
+  } finally {
+    elements.pullButton.disabled = false;
+  }
+}
+
+async function syncWithNotion(options = {}) {
+  elements.syncButton.disabled = true;
+  setSyncStatus(options.message || "A sincronizar produtos com o Notion...", "warning");
+
+  try {
+    const response = await fetch("/api/notion/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha na sincronizacao");
+    const skipped = result.skippedProperties?.length ? ` Campos ignorados: ${result.skippedProperties.join(", ")}.` : "";
+    const database = result.databaseTitle ? ` em "${result.databaseTitle}"` : "";
+    if (!options.quietSuccess) setSyncStatus(`Notion sincronizado${database}: ${result.created} criados, ${result.updated} atualizados.${skipped}`, "success");
+    return result;
+  } catch (error) {
+    setSyncStatus(error.message || "Nao foi possivel sincronizar com o Notion.", "error");
+    if (options.throwOnError) throw error;
+    return null;
+  } finally {
+    elements.syncButton.disabled = false;
+  }
+}
+
+function importData(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    try {
+      const content = String(reader.result || "");
+      const imported = file.name.toLowerCase().endsWith(".csv") ? importCsvItems(content) : importJsonItems(content);
+      items = mergeItems(imported.items);
+      movements = imported.movements || movements;
+      persist();
+      render();
+    } catch {
+      alert("Nao foi possivel importar este ficheiro.");
+    } finally {
+      elements.importFile.value = "";
+    }
+  });
+  reader.readAsText(file);
+}
+
+function exportData() {
+  const payload = JSON.stringify({ items, movements, exportedAt: new Date().toISOString() }, null, 2);
+  downloadBlob(new Blob([payload], { type: "application/json" }), `estoque-acai-${new Date().toISOString().slice(0, 10)}.json`);
+}
+
+function downloadCsvTemplate() {
+  const headers = ["produto", "categoria", "unidade", "quantidade", "minimo_semanal", "minimo_diario", "custo_unitario", "validade", "fornecedor", "dia_de_pedido", "observacoes"];
+  const example = ["Polpa de acai", "Ingredientes", "kg", "20", "10", "2", "4.80", "2026-07-30", "Fornecedor principal", "Segunda-feira", "Congelador 1"];
+  const csv = [headers, example].map((row) => row.map(escapeCsvCell).join(";")).join("\n");
+  downloadBlob(new Blob([csv], { type: "text/csv;charset=utf-8" }), "modelo-estoque-acai.csv");
+}
+
+function importJsonItems(content) {
+  const data = JSON.parse(content);
+  if (!Array.isArray(data.items)) throw new Error("Formato invalido");
+  return { items: data.items.map(normalizeItem), movements: Array.isArray(data.movements) ? data.movements : [] };
+}
+
+function importCsvItems(content) {
+  const rows = parseCsv(content).filter((row) => row.some((cell) => cell.trim()));
+  const headers = rows[0].map(normalizeHeader);
+  const importedItems = rows.slice(1).map((row) => rowToItem(headers, row)).filter((item) => item.name.trim());
+  return { items: importedItems };
+}
+
+function rowToItem(headers, row) {
+  const data = {};
+  headers.forEach((header, index) => {
+    data[header] = row[index] || "";
+  });
+  return normalizeItem({
+    name: data.produto || data.nome || data.name,
+    category: data.categoria || data.category,
+    unit: data.unidade || data.unit,
+    quantity: data.quantidade || data.quantity || data.qtd,
+    minimum: data.minimo_semanal || data.estoque_minimo || data.minimo || data.minimum || data.min,
+    dailyMinimum: data.minimo_diario || data.daily_minimum || data.dailyminimum,
+    unitCost: data.custo_unitario || data.custo || data.unit_cost || data.unitcost,
+    expiresAt: normalizeDate(data.validade || data.expires_at || data.expiresat),
+    supplier: data.fornecedor || data.supplier,
+    orderDay: data.dia_de_pedido || data.dia_pedido || data.order_day || data.orderday,
+    notes: data.observacoes || data.observacao || data.notes,
+  });
+}
+
+function mergeItems(importedItems) {
+  const byName = new Map(items.map((item) => [item.name.trim().toLowerCase(), item]));
+  const merged = [...items];
+  for (const importedItem of importedItems) {
+    const existing = byName.get(importedItem.name.trim().toLowerCase());
+    if (existing) {
+      const index = merged.findIndex((item) => item.id === existing.id);
+      merged[index] = { ...importedItem, id: existing.id, updatedAt: new Date().toISOString() };
+    } else {
+      merged.unshift(importedItem);
+    }
+  }
+  return merged;
+}
+
+function clearMovements() {
+  const confirmed = confirm("Limpar todo o historico de movimentos?");
+  if (!confirmed) return;
+  movements = [];
+  persist();
+  renderMovements();
+}
+
+function getStatus(item) {
+  if (isExpired(item)) return { label: "Vencido", className: "status-expired", priority: 4 };
+  if (isLowStock(item) && isExpiringSoon(item)) return { label: "Minimo e validade", className: "status-expiring", priority: 3 };
+  if (isLowStock(item)) return { label: "Abaixo do minimo", className: "status-low", priority: 2 };
+  if (isExpiringSoon(item)) return { label: "A vencer", className: "status-expiring", priority: 1 };
+  return { label: "OK", className: "status-ok", priority: 0 };
+}
+
+function isLowStock(item) {
+  return item.quantity <= item.minimum;
+}
+
+function isExpiringSoon(item) {
+  if (!item.expiresAt) return false;
+  const days = daysUntil(item.expiresAt);
+  return days >= 0 && days <= EXPIRING_DAYS;
+}
+
+function isExpired(item) {
+  return item.expiresAt ? daysUntil(item.expiresAt) < 0 : false;
+}
+
+function normalizeItem(item) {
+  return {
+    id: item.id || crypto.randomUUID(),
+    name: String(item.name || "Produto sem nome"),
+    category: item.category || "Outros",
+    unit: item.unit || "un",
+    quantity: numberValue(item.quantity),
+    minimum: numberValue(item.minimum),
+    dailyMinimum: numberValue(item.dailyMinimum),
+    orderQuantity: numberValue(item.orderQuantity),
+    shouldBuy: item.shouldBuy || "",
+    unitCost: numberValue(item.unitCost),
+    expiresAt: item.expiresAt || "",
+    supplier: item.supplier || "",
+    orderDay: item.orderDay || "",
+    notes: item.notes || "",
+    updatedAt: item.updatedAt || new Date().toISOString(),
+  };
+}
+
+function setSyncStatus(message, tone) {
+  elements.syncBanner.hidden = false;
+  elements.syncBanner.className = `sync-banner ${tone}`;
+  elements.syncStatus.textContent = message;
+}
+
+function persist() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+  localStorage.setItem(MOVEMENTS_KEY, JSON.stringify(movements));
+}
+
+function load(key, fallback) {
+  try {
+    const data = JSON.parse(localStorage.getItem(key));
+    return Array.isArray(data) ? data : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function setField(id, value) {
+  document.querySelector(`#${id}`).value = value ?? "";
+}
+
+function numberValue(value) {
+  const normalized = String(value ?? "").trim().replace(/\s/g, "").replace(/\.(?=\d{3}(,|$))/g, "").replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function roundQuantity(value) {
+  return Math.round(value * 100) / 100;
+}
+
+function daysUntil(dateText) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const date = new Date(`${dateText}T00:00:00`);
+  return Math.ceil((date - today) / 86400000);
+}
+
+function formatCurrency(value) {
+  return new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" }).format(value);
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("pt-PT", { maximumFractionDigits: 2 }).format(value);
+}
+
+function formatDate(dateText) {
+  if (!dateText) return "Sem data";
+  return new Intl.DateTimeFormat("pt-PT").format(new Date(`${dateText}T00:00:00`));
+}
+
+function formatDateTime(dateText) {
+  return new Intl.DateTimeFormat("pt-PT", { dateStyle: "short", timeStyle: "short" }).format(new Date(dateText));
+}
+
+function normalizeDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const match = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+  if (!match) return "";
+  const [, day, month, year] = match;
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
+function parseCsv(content) {
+  const separator = detectCsvSeparator(content);
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index];
+    const next = content[index + 1];
+    if (char === '"' && next === '"') {
+      cell += '"';
+      index += 1;
+      continue;
+    }
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+    if (char === separator && !inQuotes) {
+      row.push(cell.trim());
+      cell = "";
+      continue;
+    }
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cell.trim());
+      rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+    cell += char;
+  }
+  row.push(cell.trim());
+  rows.push(row);
+  return rows;
+}
+
+function detectCsvSeparator(content) {
+  const firstLine = content.split(/\r?\n/, 1)[0] || "";
+  return firstLine.split(";").length >= firstLine.split(",").length ? ";" : ",";
+}
+
+function normalizeHeader(value) {
+  return String(value).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_");
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function escapeCsvCell(value) {
+  const text = String(value);
+  return /[;"\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => {
+    const entities = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" };
+    return entities[char];
+  });
+}

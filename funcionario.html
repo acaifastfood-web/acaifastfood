@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-PT">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Controle de Estoque | Acai Fast Food</title>
+    <meta name="theme-color" content="#1f2e25" />
+    <link rel="manifest" href="manifest-funcionario.json" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand-lockup">
+        <img class="app-logo" src="logo-acai.png" alt="Acai Fast Food" />
+        <div>
+          <p class="eyebrow">Acai Fast Food</p>
+          <h1>Controle de Estoque</h1>
+        </div>
+      </div>
+      <div class="header-actions">
+        <a class="button ghost link-button" href="gestor.html">Gestor</a>
+        <button class="button ghost" id="pullButton" type="button">Atualizar base</button>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <div class="sync-banner" id="syncBanner" hidden>
+        <span id="syncStatus">Notion nao configurado.</span>
+      </div>
+
+      <div class="whatsapp-share" id="whatsappShare" hidden></div>
+
+      <section class="panel login-panel" id="loginPanel">
+        <div class="panel-heading">
+          <h2>Login do funcionario</h2>
+        </div>
+        <form class="login-form" id="loginForm" autocomplete="off">
+          <label>
+            Utilizador
+            <input id="loginUsername" name="username" type="text" required />
+          </label>
+          <label>
+            Senha
+            <input id="loginPassword" name="password" type="password" required />
+          </label>
+          <button class="button primary" type="submit">Entrar</button>
+          <p class="login-status" id="loginStatus"></p>
+        </form>
+      </section>
+
+      <section class="panel staff-panel" id="staffPanel" hidden>
+        <div class="panel-heading">
+          <div>
+            <h2>Contagem diaria</h2>
+            <p class="panel-subtitle">Responsavel: <strong id="currentUserName"></strong></p>
+          </div>
+          <div class="row-actions">
+            <button class="button ghost" id="logoutButton" type="button">Sair</button>
+            <button class="button primary" id="saveCountsButton" type="button">Guardar contagem</button>
+          </div>
+        </div>
+        <div class="staff-toolbar">
+          <label>
+            Data
+            <input id="countDate" type="date" />
+          </label>
+          <label>
+            Tipo de controle
+            <select id="controlTypeFilter">
+              <option value="all">Todos</option>
+            </select>
+          </label>
+          <label class="search-field">
+            <span>Pesquisar</span>
+            <input id="staffSearchInput" type="search" placeholder="Produto ou fornecedor" />
+          </label>
+          <button class="button ghost" id="clearStaffSearchButton" type="button">Limpar pesquisa</button>
+        </div>
+        <p class="list-count" id="staffCountInfo">0 produtos visiveis</p>
+        <div class="count-list" id="countList"></div>
+      </section>
+    </main>
+
+    <script src="funcionario.js"></script>
+  </body>
+</html>

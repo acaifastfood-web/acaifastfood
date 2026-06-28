@@ -1,0 +1,18 @@
+{
+  "name": "Acai Fast Food - Funcionario",
+  "short_name": "Acai Contagem",
+  "description": "App de contagem diaria de estoque para funcionarios.",
+  "start_url": "/funcionario.html",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f7f3",
+  "theme_color": "#1f2e25",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

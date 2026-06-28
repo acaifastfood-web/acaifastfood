@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="pt-PT">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gestor | Acai Fast Food</title>
+    <meta name="theme-color" content="#1f2e25" />
+    <link rel="manifest" href="manifest-gestor.json" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand-lockup">
+        <img class="app-logo" src="logo-acai.png" alt="Acai Fast Food" />
+        <div>
+          <p class="eyebrow">Acai Fast Food</p>
+          <h1>App do Gestor</h1>
+        </div>
+      </div>
+      <div class="header-actions">
+        <a class="button ghost link-button" href="funcionario.html">Funcionario</a>
+        <button class="button ghost" id="templateButton" type="button">Modelo CSV</button>
+        <button class="button ghost" id="pullButton" type="button">Puxar Notion</button>
+        <button class="button ghost" id="syncButton" type="button">Sincronizar Notion</button>
+        <button class="button ghost" id="exportButton" type="button">Exportar</button>
+        <label class="button ghost file-button" for="importFile">Importar</label>
+        <input id="importFile" type="file" accept=".json,.csv,application/json,text/csv" />
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <div class="sync-banner" id="syncBanner" hidden>
+        <span id="syncStatus">Notion nao configurado.</span>
+      </div>
+
+      <div class="manager-layout">
+        <aside class="manager-sidebar" aria-label="Navegacao do gestor">
+          <button class="sidebar-button active" data-view-target="resumo" type="button">Resumo</button>
+          <button class="sidebar-button" data-view-target="pedidos" type="button">Pedidos</button>
+          <button class="sidebar-button" data-view-target="funcionarios" type="button">Funcionarios</button>
+          <button class="sidebar-button" data-view-target="inventario" type="button">Inventario</button>
+          <button class="sidebar-button" data-view-target="movimentos" type="button">Movimentos</button>
+          <button class="sidebar-button" data-view-target="registos" type="button">Registos</button>
+        </aside>
+
+        <div class="manager-content">
+          <section class="manager-view" data-view="resumo">
+            <div class="view-heading">
+              <div>
+                <h2>Resumo</h2>
+                <p class="panel-subtitle">Visao geral do estoque e alertas principais.</p>
+              </div>
+            </div>
+            <div class="summary-grid" aria-label="Resumo do estoque">
+              <article class="metric">
+                <span class="metric-label">Itens ativos</span>
+                <strong id="totalItems">0</strong>
+              </article>
+              <article class="metric warning">
+                <span class="metric-label">Abaixo do minimo</span>
+                <strong id="lowStockItems">0</strong>
+              </article>
+              <article class="metric danger">
+                <span class="metric-label">Vencem em 7 dias</span>
+                <strong id="expiringItems">0</strong>
+              </article>
+              <article class="metric">
+                <span class="metric-label">Valor estimado</span>
+                <strong id="stockValue">0,00 EUR</strong>
+              </article>
+            </div>
+          </section>
+
+      <section class="panel user-panel manager-view" data-view="funcionarios" hidden>
+        <div class="panel-heading">
+          <div>
+            <h2>Funcionarios e acessos</h2>
+            <p class="panel-subtitle">Cadastrar, alterar, pausar, excluir e reiniciar senhas.</p>
+          </div>
+          <button class="button ghost" id="refreshUsersButton" type="button">Atualizar acessos</button>
+        </div>
+
+        <form class="user-form" id="userForm" autocomplete="off">
+          <input id="userId" type="hidden" />
+          <label>
+            Nome
+            <input id="userName" name="name" type="text" required />
+          </label>
+          <label>
+            Utilizador
+            <input id="userUsername" name="username" type="text" required />
+          </label>
+          <label>
+            Setor
+            <select id="userSector" name="sector" required>
+              <option value="Gestao">Gestao</option>
+              <option value="Sala">Sala</option>
+              <option value="Cozinha">Cozinha</option>
+            </select>
+          </label>
+          <label>
+            Perfil
+            <select id="userRole" name="role" required>
+              <option value="employee">Funcionario</option>
+              <option value="manager">Gestor - acesso total</option>
+            </select>
+          </label>
+          <label>
+            Senha
+            <input id="userPassword" name="password" type="text" placeholder="Obrigatoria só para novo acesso" />
+          </label>
+          <label class="check-field">
+            <input id="userActive" name="active" type="checkbox" checked />
+            Acesso ativo
+          </label>
+          <div class="row-actions">
+            <button class="button primary" type="submit">Guardar acesso</button>
+            <button class="button ghost" id="resetUserFormButton" type="button">Limpar</button>
+          </div>
+        </form>
+
+        <div class="user-feedback" id="userFeedback"></div>
+        <div class="user-list" id="userList"></div>
+      </section>
+
+      <section class="panel purchase-panel manager-view" data-view="pedidos" hidden>
+        <div class="panel-heading">
+          <div>
+            <h2>Relacao de pedidos</h2>
+            <p class="panel-subtitle">Produtos abaixo do minimo, agrupados por fornecedor.</p>
+          </div>
+          <div class="row-actions">
+            <button class="button ghost" id="selectAllPurchasesButton" type="button">Selecionar todos</button>
+            <button class="button ghost" id="clearPurchasesButton" type="button">Limpar selecao</button>
+            <button class="button primary" id="copyPurchasesButton" type="button">Copiar selecionados</button>
+          </div>
+        </div>
+        <div class="purchase-summary">
+          <strong id="purchaseCountInfo">0 produtos sugeridos</strong>
+          <span id="selectedPurchaseInfo">0 selecionados</span>
+        </div>
+        <textarea class="purchase-output" id="purchaseOutput" readonly hidden></textarea>
+        <div class="purchase-list" id="purchaseList"></div>
+      </section>
+
+      <section class="workspace manager-view" data-view="inventario" hidden>
+        <aside class="panel form-panel">
+          <div class="panel-heading">
+            <h2 id="formTitle">Novo item</h2>
+            <button class="icon-button" id="resetFormButton" type="button" title="Limpar formulario">+</button>
+          </div>
+
+          <form id="itemForm" autocomplete="off">
+            <input id="itemId" type="hidden" />
+            <label>
+              Produto
+              <input id="name" name="name" type="text" required />
+            </label>
+            <div class="field-row">
+              <label>
+                Categoria
+                <select id="category" name="category" required>
+                  <option value="Ingredientes">Ingredientes</option>
+                  <option value="Embalagens">Embalagens</option>
+                  <option value="Bebidas">Bebidas</option>
+                  <option value="Limpeza">Limpeza</option>
+                  <option value="Outros">Outros</option>
+                </select>
+              </label>
+              <label>
+                Unidade
+                <select id="unit" name="unit" required>
+                  <option value="kg">kg</option>
+                  <option value="un">un</option>
+                  <option value="L">L</option>
+                  <option value="cx">cx</option>
+                  <option value="pct">pct</option>
+                  <option value="cubas">cubas</option>
+                </select>
+              </label>
+            </div>
+            <div class="field-row">
+              <label>
+                Quantidade
+                <input id="quantity" name="quantity" type="number" min="0" step="0.01" required />
+              </label>
+              <label>
+                Minimo semanal
+                <input id="minimum" name="minimum" type="number" min="0" step="0.01" required />
+              </label>
+              <label>
+                Minimo diario
+                <input id="dailyMinimum" name="dailyMinimum" type="number" min="0" step="0.01" />
+              </label>
+            </div>
+            <div class="field-row">
+              <label>
+                Custo unitario
+                <input id="unitCost" name="unitCost" type="number" min="0" step="0.01" />
+              </label>
+              <label>
+                Validade
+                <input id="expiresAt" name="expiresAt" type="date" />
+              </label>
+            </div>
+            <label>
+              Fornecedor
+              <input id="supplier" name="supplier" type="text" />
+            </label>
+            <label>
+              Dia de pedido
+              <select id="orderDay" name="orderDay">
+                <option value="">Sem dia definido</option>
+                <option value="Segunda-feira">Segunda-feira</option>
+                <option value="Terca-feira">Terca-feira</option>
+                <option value="Quarta-feira">Quarta-feira</option>
+                <option value="Quinta-feira">Quinta-feira</option>
+                <option value="Sexta-feira">Sexta-feira</option>
+                <option value="Sabado">Sabado</option>
+                <option value="Domingo">Domingo</option>
+              </select>
+            </label>
+            <label>
+              Observacoes
+              <textarea id="notes" name="notes" rows="3"></textarea>
+            </label>
+            <button class="button primary" type="submit">Guardar item</button>
+          </form>
+        </aside>
+
+        <section class="panel inventory-panel">
+          <div class="toolbar">
+            <label class="search-field">
+              <span>Pesquisar</span>
+              <input id="searchInput" type="search" placeholder="Produto, fornecedor ou categoria" />
+            </label>
+            <label>
+              Estado
+              <select id="statusFilter">
+                <option value="all">Todos</option>
+                <option value="low">Abaixo do minimo</option>
+                <option value="expiring">A vencer</option>
+                <option value="ok">Sem alertas</option>
+              </select>
+            </label>
+            <label>
+              Categoria
+              <select id="categoryFilter">
+                <option value="all">Todas</option>
+                <option value="Ingredientes">Ingredientes</option>
+                <option value="Embalagens">Embalagens</option>
+                <option value="Bebidas">Bebidas</option>
+                <option value="Limpeza">Limpeza</option>
+                <option value="Outros">Outros</option>
+              </select>
+            </label>
+            <button class="button ghost" id="clearFiltersButton" type="button">Limpar filtros</button>
+          </div>
+
+          <p class="list-count" id="managerCountInfo">0 produtos visiveis</p>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Produto</th>
+                  <th>Qtd.</th>
+                  <th>Minimos</th>
+                  <th>Validade</th>
+                  <th>Estado</th>
+                  <th>Acoes</th>
+                </tr>
+              </thead>
+              <tbody id="inventoryBody"></tbody>
+            </table>
+          </div>
+
+          <div class="empty-state" id="emptyState" hidden>
+            <h3>Sem itens para mostrar</h3>
+            <p>Adiciona produtos ou ajusta os filtros para ver o estoque.</p>
+          </div>
+        </section>
+      </section>
+
+      <section class="panel movement-panel manager-view" data-view="movimentos" hidden>
+        <div class="panel-heading">
+          <h2>Movimentos recentes</h2>
+          <button class="button ghost" id="clearMovementsButton" type="button">Limpar historico</button>
+        </div>
+        <div id="movementList" class="movement-list"></div>
+      </section>
+
+      <section class="panel count-record-panel manager-view" data-view="registos" hidden>
+        <div class="panel-heading">
+          <div>
+            <h2>Registo de contagens</h2>
+            <p class="panel-subtitle">Data, hora e responsavel pelos preenchimentos.</p>
+          </div>
+          <button class="button ghost" id="refreshCountRecordsButton" type="button">Atualizar registos</button>
+        </div>
+        <div id="countRecordList" class="count-record-list"></div>
+      </section>
+        </div>
+      </div>
+    </main>
+
+    <dialog id="movementDialog">
+      <form id="movementForm" method="dialog">
+        <div class="panel-heading">
+          <h2 id="movementTitle">Movimento</h2>
+          <button class="icon-button" value="cancel" type="submit" title="Fechar">x</button>
+        </div>
+        <input id="movementItemId" type="hidden" />
+        <label>
+          Tipo
+          <select id="movementType">
+            <option value="in">Entrada</option>
+            <option value="out">Saida</option>
+          </select>
+        </label>
+        <label>
+          Quantidade
+          <input id="movementQuantity" type="number" min="0.01" step="0.01" required />
+        </label>
+        <label>
+          Motivo
+          <input id="movementReason" type="text" placeholder="Compra, venda, perda, ajuste..." />
+        </label>
+        <div class="dialog-actions">
+          <button class="button ghost" value="cancel" type="submit">Cancelar</button>
+          <button class="button primary" id="applyMovementButton" value="default" type="submit">Aplicar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <template id="rowTemplate">
+      <tr>
+        <td>
+          <strong data-field="name"></strong>
+          <span data-field="meta"></span>
+        </td>
+        <td data-field="quantity"></td>
+        <td data-field="minimum"></td>
+        <td data-field="expiresAt"></td>
+        <td><span class="status-pill" data-field="status"></span></td>
+        <td>
+          <div class="row-actions">
+            <button class="icon-button" data-action="move" type="button">+/-</button>
+            <button class="icon-button" data-action="edit" type="button">Editar</button>
+            <button class="icon-button danger" data-action="delete" type="button">Apagar</button>
+          </div>
+        </td>
+      </tr>
+    </template>
+
+    <script src="gestor.js"></script>
+  </body>
+</html>
