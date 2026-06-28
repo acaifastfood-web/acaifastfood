@@ -550,6 +550,121 @@ td span {
   margin-bottom: 12px;
 }
 
+.revenue-panel {
+  margin-bottom: 18px;
+}
+
+.revenue-form {
+  display: grid;
+  gap: 14px;
+}
+
+.revenue-grid,
+.expense-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.revenue-grid.compact {
+  grid-template-columns: minmax(130px, 220px);
+}
+
+.expense-grid {
+  grid-template-columns: minmax(180px, 1fr) 140px minmax(180px, 1fr) 140px minmax(180px, 1fr) 140px;
+}
+
+.revenue-subsection {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.revenue-subsection h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.day-notes-field {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.day-notes-field legend {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 800;
+  padding: 0 6px;
+}
+
+.day-notes-field label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 800;
+}
+
+.day-notes-field input {
+  width: 18px;
+  min-height: 18px;
+}
+
+.revenue-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.revenue-totals span {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfa;
+  color: var(--muted);
+  padding: 10px;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.revenue-totals strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 1.1rem;
+}
+
+.revenue-list {
+  display: grid;
+  gap: 10px;
+}
+
+.revenue-record {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) repeat(3, minmax(120px, 0.7fr)) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfa;
+  padding: 12px;
+}
+
+.revenue-record strong,
+.revenue-record span {
+  display: block;
+}
+
+.revenue-record span {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
 .check-field {
   align-items: center;
   display: flex;
@@ -1045,6 +1160,10 @@ dialog::backdrop {
   .field-row,
   .user-form,
   .user-row,
+  .revenue-grid,
+  .expense-grid,
+  .revenue-totals,
+  .revenue-record,
   .purchase-row,
   .supplier-heading,
   .purchase-heading,

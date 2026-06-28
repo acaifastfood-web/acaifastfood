@@ -10,9 +10,11 @@ const ROOT = __dirname;
 const NOTION_VERSION = process.env.NOTION_VERSION || "2026-03-11";
 const NOTION_TOKEN = process.env.NOTION_TOKEN || "";
 const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || "";
+const NOTION_REVENUE_DATABASE_ID = process.env.NOTION_REVENUE_DATABASE_ID || "";
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
 ensureDataDir();
 const COUNT_RECORDS_PATH = path.join(DATA_DIR, "count-records.json");
+const REVENUE_RECORDS_PATH = path.join(DATA_DIR, "faturacao-records.json");
 const USERS_PATH = path.join(DATA_DIR, "app-users.json");
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const sessions = new Map();
@@ -57,6 +59,43 @@ const PROPERTY_ALIASES = {
   dailyMinimum: ["Mínimo Diário", "Minimo Diario"],
   orderQuantity: ["Quantidade a Comprar ", "Quantidade a Comprar"],
   controlType: ["Tipo de controle ", "Tipo de controle"],
+};
+
+const REVENUE_PROPERTY_NAMES = {
+  date: process.env.NOTION_REVENUE_PROPERTY_DATE || "Data",
+  coins: process.env.NOTION_REVENUE_PROPERTY_COINS || "Moedas",
+  mbway: process.env.NOTION_REVENUE_PROPERTY_MBWAY || "MBWAY",
+  uberEats: process.env.NOTION_REVENUE_PROPERTY_UBER_EATS || "Uber Eats",
+  glovo: process.env.NOTION_REVENUE_PROPERTY_GLOVO || "Glovo",
+  bolt: process.env.NOTION_REVENUE_PROPERTY_BOLT || "Bolt",
+  multibanco: process.env.NOTION_REVENUE_PROPERTY_MULTIBANCO || "Multibanco",
+  cash: process.env.NOTION_REVENUE_PROPERTY_CASH || "Dinheiro",
+  fuel: process.env.NOTION_REVENUE_PROPERTY_FUEL || "Combustível",
+  expense1: process.env.NOTION_REVENUE_PROPERTY_EXPENSE_1 || "Despesa 1",
+  expense1Description: process.env.NOTION_REVENUE_PROPERTY_EXPENSE_1_DESCRIPTION || "Descrição Despesa 1",
+  expense2: process.env.NOTION_REVENUE_PROPERTY_EXPENSE_2 || "Despesa 2",
+  expense2Description: process.env.NOTION_REVENUE_PROPERTY_EXPENSE_2_DESCRIPTION || "Descrição Despesa 2",
+  expense3: process.env.NOTION_REVENUE_PROPERTY_EXPENSE_3 || "Despesa 3",
+  expense3Description: process.env.NOTION_REVENUE_PROPERTY_EXPENSE_3_DESCRIPTION || "Descrição Despesa 3",
+  orders: process.env.NOTION_REVENUE_PROPERTY_ORDERS || "Qtd de Pedidos",
+  dayNotes: process.env.NOTION_REVENUE_PROPERTY_DAY_NOTES || "Obs do dia",
+  otherObservation: process.env.NOTION_REVENUE_PROPERTY_OTHER_OBSERVATION || "Observação",
+  grossTotal: process.env.NOTION_REVENUE_PROPERTY_GROSS_TOTAL || "Total Faturação",
+  expenseTotal: process.env.NOTION_REVENUE_PROPERTY_EXPENSE_TOTAL || "Total Despesas",
+  netTotal: process.env.NOTION_REVENUE_PROPERTY_NET_TOTAL || "Total Líquido",
+  updatedAt: process.env.NOTION_REVENUE_PROPERTY_UPDATED_AT || "Atualizado em",
+};
+
+const REVENUE_PROPERTY_ALIASES = {
+  fuel: ["Combustível", "Combustivel"],
+  expense1Description: ["Descrição Despesa 1", "Descricao Despesa 1"],
+  expense2Description: ["Descrição Despesa 2", "Descricao Despesa 2"],
+  expense3Description: ["Descrição Despesa 3", "Descricao Despesa 3"],
+  dayNotes: ["Obs do dia", "Observações do dia", "Observacoes do dia"],
+  otherObservation: ["Observação", "Observacao", "Outros"],
+  grossTotal: ["Total Faturação", "Total Faturacao"],
+  expenseTotal: ["Total Despesas", "Despesas"],
+  netTotal: ["Total Líquido", "Total Liquido"],
 };
 
 const MIME_TYPES = {
@@ -131,6 +170,18 @@ http
         return await handleCountRecordItemStatus(request, response);
       }
 
+      if (request.url === "/api/revenue-records" && request.method === "GET") {
+        return handleRevenueRecords(response);
+      }
+
+      if (request.url === "/api/revenue-records/save" && request.method === "POST") {
+        return await handleSaveRevenueRecord(request, response);
+      }
+
+      if (request.url === "/api/revenue-records/delete" && request.method === "POST") {
+        return await handleDeleteRevenueRecord(request, response);
+      }
+
       return serveStatic(request, response);
     } catch (error) {
       return sendJson(response, 500, { error: error.message || "Erro interno" });
@@ -199,6 +250,38 @@ async function handleCountRecordItemStatus(request, response) {
   item.requestedAt = requested ? new Date().toISOString() : "";
   writeCountRecords(records);
   return sendJson(response, 200, { records: records.slice(0, 120) });
+}
+
+function handleRevenueRecords(response) {
+  const records = readRevenueRecords().slice(0, 180);
+  return sendJson(response, 200, { records });
+}
+
+async function handleSaveRevenueRecord(request, response) {
+  const body = await readJson(request);
+  const record = normalizeRevenueRecord(body.record || body);
+  record.updatedAt = new Date().toISOString();
+  const records = readRevenueRecords();
+  const index = records.findIndex((entry) => entry.id === record.id || entry.date === record.date);
+  if (index >= 0) {
+    record.id = records[index].id;
+    record.createdAt = records[index].createdAt || record.createdAt;
+    records[index] = record;
+  } else {
+    records.unshift(record);
+  }
+  writeRevenueRecords(records);
+
+  const notion = await syncRevenueRecordToNotion(record);
+  return sendJson(response, 200, { record, records: readRevenueRecords().slice(0, 180), notion });
+}
+
+async function handleDeleteRevenueRecord(request, response) {
+  const body = await readJson(request);
+  const id = String(body.id || "");
+  const records = readRevenueRecords().filter((record) => record.id !== id);
+  writeRevenueRecords(records);
+  return sendJson(response, 200, { records: records.slice(0, 180) });
 }
 
 function handleUsers(response) {
@@ -421,6 +504,156 @@ function buildCountRecord(rawRecord, session) {
       requestedAt: "",
     })),
   };
+}
+
+function normalizeRevenueRecord(rawRecord) {
+  const expenses = Array.isArray(rawRecord.expenses) ? rawRecord.expenses : [];
+  const normalized = {
+    id: String(rawRecord.id || crypto.randomUUID()),
+    date: normalizeDate(rawRecord.date) || new Date().toISOString().slice(0, 10),
+    coins: moneyValue(rawRecord.coins),
+    mbway: moneyValue(rawRecord.mbway),
+    uberEats: moneyValue(rawRecord.uberEats),
+    glovo: moneyValue(rawRecord.glovo),
+    bolt: moneyValue(rawRecord.bolt),
+    multibanco: moneyValue(rawRecord.multibanco),
+    cash: moneyValue(rawRecord.cash),
+    fuel: moneyValue(rawRecord.fuel),
+    expenses: [0, 1, 2].map((index) => ({
+      description: String(expenses[index]?.description || rawRecord[`expense${index + 1}Description`] || "").trim(),
+      amount: moneyValue(expenses[index]?.amount ?? rawRecord[`expense${index + 1}`]),
+    })),
+    orders: Math.max(0, Math.round(numberValue(rawRecord.orders))),
+    dayNotes: normalizeDayNotes(rawRecord.dayNotes),
+    otherObservation: String(rawRecord.otherObservation || "").trim(),
+    createdAt: rawRecord.createdAt || new Date().toISOString(),
+    updatedAt: rawRecord.updatedAt || new Date().toISOString(),
+  };
+  normalized.grossTotal = moneyValue(
+    normalized.coins + normalized.mbway + normalized.uberEats + normalized.glovo + normalized.bolt + normalized.multibanco + normalized.cash,
+  );
+  normalized.expenseTotal = moneyValue(normalized.fuel + normalized.expenses.reduce((total, expense) => total + expense.amount, 0));
+  normalized.netTotal = moneyValue(normalized.grossTotal - normalized.expenseTotal);
+  return normalized;
+}
+
+function normalizeDayNotes(value) {
+  const allowed = new Set(["Fraco", "Forte", "Chuva", "Vento", "Outros"]);
+  const entries = Array.isArray(value) ? value : String(value || "").split(",");
+  return [...new Set(entries.map((entry) => String(entry || "").trim()).filter((entry) => allowed.has(entry)))];
+}
+
+function moneyValue(value) {
+  return Math.round(numberValue(value) * 100) / 100;
+}
+
+function normalizeDate(value) {
+  const raw = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  return "";
+}
+
+async function syncRevenueRecordToNotion(record) {
+  if (!NOTION_TOKEN || !NOTION_REVENUE_DATABASE_ID) {
+    return { configured: false, synced: false, message: "NOTION_REVENUE_DATABASE_ID nao configurado." };
+  }
+
+  try {
+    const dataSourceRef = await resolveDataSource(NOTION_REVENUE_DATABASE_ID);
+    const dataSource = dataSourceRef.dataSource;
+    const properties = dataSource.properties || {};
+    const titleProperty = findTitleProperty(properties);
+    if (!titleProperty) throw new Error("A database de faturacao precisa de uma propriedade de titulo.");
+
+    const notionProperties = buildRevenueNotionProperties(record, properties, titleProperty.name);
+    const existingPage = await findRevenuePageByDate(dataSourceRef.id, properties, record.date, titleProperty.name);
+    if (existingPage) {
+      await notionRequest(`/pages/${existingPage.id}`, {
+        method: "PATCH",
+        body: { properties: notionProperties },
+      });
+      return { configured: true, synced: true, action: "updated", databaseTitle: dataSourceRef.title };
+    }
+
+    await notionRequest("/pages", {
+      method: "POST",
+      body: {
+        parent: { data_source_id: dataSourceRef.id },
+        properties: notionProperties,
+      },
+    });
+    return { configured: true, synced: true, action: "created", databaseTitle: dataSourceRef.title };
+  } catch (error) {
+    return { configured: true, synced: false, error: friendlyNotionError(error.message) };
+  }
+}
+
+async function findRevenuePageByDate(dataSourceId, properties, date, titlePropertyName) {
+  const datePropertyName = revenuePropertyName("date", properties);
+  if (properties[datePropertyName]?.type === "date") {
+    const result = await notionRequest(`/data_sources/${dataSourceId}/query`, {
+      method: "POST",
+      body: {
+        filter: {
+          property: datePropertyName,
+          date: { equals: date },
+        },
+        page_size: 1,
+      },
+    });
+    if (result.results?.[0]) return result.results[0];
+  }
+
+  return findPageByTitle(dataSourceId, titlePropertyName, revenueTitle(date));
+}
+
+function buildRevenueNotionProperties(record, databaseProperties, titlePropertyName) {
+  const values = {};
+  setRevenuePropertyValue(values, databaseProperties, "date", record.date);
+  setRevenuePropertyValue(values, databaseProperties, "coins", record.coins);
+  setRevenuePropertyValue(values, databaseProperties, "mbway", record.mbway);
+  setRevenuePropertyValue(values, databaseProperties, "uberEats", record.uberEats);
+  setRevenuePropertyValue(values, databaseProperties, "glovo", record.glovo);
+  setRevenuePropertyValue(values, databaseProperties, "bolt", record.bolt);
+  setRevenuePropertyValue(values, databaseProperties, "multibanco", record.multibanco);
+  setRevenuePropertyValue(values, databaseProperties, "cash", record.cash);
+  setRevenuePropertyValue(values, databaseProperties, "fuel", record.fuel);
+  setRevenuePropertyValue(values, databaseProperties, "expense1", record.expenses[0]?.amount);
+  setRevenuePropertyValue(values, databaseProperties, "expense1Description", record.expenses[0]?.description);
+  setRevenuePropertyValue(values, databaseProperties, "expense2", record.expenses[1]?.amount);
+  setRevenuePropertyValue(values, databaseProperties, "expense2Description", record.expenses[1]?.description);
+  setRevenuePropertyValue(values, databaseProperties, "expense3", record.expenses[2]?.amount);
+  setRevenuePropertyValue(values, databaseProperties, "expense3Description", record.expenses[2]?.description);
+  setRevenuePropertyValue(values, databaseProperties, "orders", record.orders);
+  setRevenuePropertyValue(values, databaseProperties, "dayNotes", record.dayNotes.join(", "));
+  setRevenuePropertyValue(values, databaseProperties, "otherObservation", record.otherObservation);
+  setRevenuePropertyValue(values, databaseProperties, "grossTotal", record.grossTotal);
+  setRevenuePropertyValue(values, databaseProperties, "expenseTotal", record.expenseTotal);
+  setRevenuePropertyValue(values, databaseProperties, "netTotal", record.netTotal);
+  setRevenuePropertyValue(values, databaseProperties, "updatedAt", record.updatedAt);
+  values[titlePropertyName] = revenueTitle(record.date);
+
+  const notionProperties = {};
+  for (const [propertyName, value] of Object.entries(values)) {
+    const property = databaseProperties[propertyName];
+    if (!property) continue;
+    const serialized = serializeProperty(property.type, value);
+    if (serialized) notionProperties[propertyName] = serialized;
+  }
+  return notionProperties;
+}
+
+function setRevenuePropertyValue(values, databaseProperties, key, value) {
+  values[revenuePropertyName(key, databaseProperties)] = value;
+}
+
+function revenuePropertyName(key, properties) {
+  const candidates = [REVENUE_PROPERTY_NAMES[key], ...(REVENUE_PROPERTY_ALIASES[key] || [])].filter(Boolean);
+  return candidates.find((name) => properties[name]) || REVENUE_PROPERTY_NAMES[key];
+}
+
+function revenueTitle(date) {
+  return `Faturacao ${date}`;
 }
 
 async function queryDataSourcePages(dataSourceId) {
@@ -1049,6 +1282,28 @@ function appendCountRecord(record) {
 
 function writeCountRecords(records) {
   fs.writeFileSync(COUNT_RECORDS_PATH, JSON.stringify(records, null, 2));
+}
+
+function readRevenueRecords() {
+  try {
+    if (!fs.existsSync(REVENUE_RECORDS_PATH)) return [];
+    const records = JSON.parse(fs.readFileSync(REVENUE_RECORDS_PATH, "utf8"));
+    if (!Array.isArray(records)) return [];
+    let changed = false;
+    const normalizedRecords = records.map((record) => {
+      const normalized = normalizeRevenueRecord(record);
+      if (!record.id || !("grossTotal" in record) || !("expenseTotal" in record) || !("netTotal" in record)) changed = true;
+      return normalized;
+    });
+    if (changed) writeRevenueRecords(normalizedRecords);
+    return normalizedRecords.sort((a, b) => b.date.localeCompare(a.date) || b.updatedAt.localeCompare(a.updatedAt));
+  } catch {
+    return [];
+  }
+}
+
+function writeRevenueRecords(records) {
+  fs.writeFileSync(REVENUE_RECORDS_PATH, JSON.stringify(records.slice(0, 500), null, 2));
 }
 
 function isNotionConfigured() {

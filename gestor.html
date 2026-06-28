@@ -38,6 +38,7 @@
       <div class="manager-layout">
         <aside class="manager-sidebar" aria-label="Navegacao do gestor">
           <button class="sidebar-button active" data-view-target="resumo" type="button">Resumo</button>
+          <button class="sidebar-button" data-view-target="faturacao" type="button">Faturação</button>
           <button class="sidebar-button" data-view-target="pedidos" type="button">Pedidos</button>
           <button class="sidebar-button" data-view-target="funcionarios" type="button">Funcionarios</button>
           <button class="sidebar-button" data-view-target="inventario" type="button">Inventario</button>
@@ -71,6 +72,124 @@
                 <strong id="stockValue">0,00 EUR</strong>
               </article>
             </div>
+          </section>
+
+          <section class="panel revenue-panel manager-view" data-view="faturacao" hidden>
+            <div class="panel-heading">
+              <div>
+                <h2>Faturação diária</h2>
+                <p class="panel-subtitle">Fecho diário por método de pagamento, despesas e observações do dia.</p>
+              </div>
+              <button class="button ghost" id="refreshRevenueButton" type="button">Atualizar faturação</button>
+            </div>
+
+            <form class="revenue-form" id="revenueForm" autocomplete="off">
+              <input id="revenueId" type="hidden" />
+              <label>
+                Data
+                <input id="revenueDate" name="date" type="date" required />
+              </label>
+
+              <div class="revenue-grid">
+                <label>
+                  Moedas
+                  <input id="revenueCoins" name="coins" type="number" min="0" step="0.01" />
+                </label>
+                <label>
+                  MBWAY
+                  <input id="revenueMbway" name="mbway" type="number" min="0" step="0.01" />
+                </label>
+                <label>
+                  Uber Eats
+                  <input id="revenueUberEats" name="uberEats" type="number" min="0" step="0.01" />
+                </label>
+                <label>
+                  Glovo
+                  <input id="revenueGlovo" name="glovo" type="number" min="0" step="0.01" />
+                </label>
+                <label>
+                  Bolt
+                  <input id="revenueBolt" name="bolt" type="number" min="0" step="0.01" />
+                </label>
+                <label>
+                  Multibanco
+                  <input id="revenueMultibanco" name="multibanco" type="number" min="0" step="0.01" />
+                </label>
+                <label>
+                  Dinheiro
+                  <input id="revenueCash" name="cash" type="number" min="0" step="0.01" />
+                </label>
+                <label>
+                  Combustível
+                  <input id="revenueFuel" name="fuel" type="number" min="0" step="0.01" />
+                </label>
+              </div>
+
+              <div class="revenue-subsection">
+                <h3>Despesas do dia</h3>
+                <div class="expense-grid">
+                  <label>
+                    Descrição despesa 1
+                    <input id="revenueExpense1Description" name="expense1Description" type="text" />
+                  </label>
+                  <label>
+                    Valor
+                    <input id="revenueExpense1" name="expense1" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>
+                    Descrição despesa 2
+                    <input id="revenueExpense2Description" name="expense2Description" type="text" />
+                  </label>
+                  <label>
+                    Valor
+                    <input id="revenueExpense2" name="expense2" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>
+                    Descrição despesa 3
+                    <input id="revenueExpense3Description" name="expense3Description" type="text" />
+                  </label>
+                  <label>
+                    Valor
+                    <input id="revenueExpense3" name="expense3" type="number" min="0" step="0.01" />
+                  </label>
+                </div>
+              </div>
+
+              <div class="revenue-grid compact">
+                <label>
+                  Qtd de Pedidos
+                  <input id="revenueOrders" name="orders" type="number" min="0" step="1" />
+                </label>
+              </div>
+
+              <fieldset class="day-notes-field">
+                <legend>Obs do dia</legend>
+                <label><input name="dayNotes" type="checkbox" value="Fraco" /> Fraco</label>
+                <label><input name="dayNotes" type="checkbox" value="Forte" /> Forte</label>
+                <label><input name="dayNotes" type="checkbox" value="Chuva" /> Chuva</label>
+                <label><input name="dayNotes" type="checkbox" value="Vento" /> Vento</label>
+                <label><input id="revenueOtherToggle" name="dayNotes" type="checkbox" value="Outros" /> Outros</label>
+              </fieldset>
+
+              <label id="revenueOtherObservationWrap" hidden>
+                Observação
+                <textarea id="revenueOtherObservation" name="otherObservation" rows="3"></textarea>
+              </label>
+
+              <div class="revenue-totals" id="revenueTotals">
+                <span>Total faturação: <strong data-field="gross">0,00 EUR</strong></span>
+                <span>Total despesas: <strong data-field="expenses">0,00 EUR</strong></span>
+                <span>Total líquido: <strong data-field="net">0,00 EUR</strong></span>
+              </div>
+
+              <div class="row-actions">
+                <button class="button primary" type="submit">Guardar faturação</button>
+                <button class="button ghost" id="resetRevenueFormButton" type="button">Limpar</button>
+              </div>
+            </form>
+
+            <div class="user-feedback" id="revenueFeedback"></div>
+            <div class="revenue-list" id="revenueList"></div>
           </section>
 
       <section class="panel user-panel manager-view" data-view="funcionarios" hidden>

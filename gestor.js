@@ -7,6 +7,7 @@ let items = load(STORAGE_KEY, []);
 let movements = load(MOVEMENTS_KEY, []);
 let selectedPurchaseIds = new Set(load(PURCHASE_SELECTION_KEY, []));
 let countRecords = [];
+let revenueRecords = [];
 
 const elements = {
   form: document.querySelector("#itemForm"),
@@ -25,6 +26,32 @@ const elements = {
   lowStockItems: document.querySelector("#lowStockItems"),
   expiringItems: document.querySelector("#expiringItems"),
   stockValue: document.querySelector("#stockValue"),
+  revenueForm: document.querySelector("#revenueForm"),
+  revenueId: document.querySelector("#revenueId"),
+  revenueDate: document.querySelector("#revenueDate"),
+  revenueCoins: document.querySelector("#revenueCoins"),
+  revenueMbway: document.querySelector("#revenueMbway"),
+  revenueUberEats: document.querySelector("#revenueUberEats"),
+  revenueGlovo: document.querySelector("#revenueGlovo"),
+  revenueBolt: document.querySelector("#revenueBolt"),
+  revenueMultibanco: document.querySelector("#revenueMultibanco"),
+  revenueCash: document.querySelector("#revenueCash"),
+  revenueFuel: document.querySelector("#revenueFuel"),
+  revenueExpense1Description: document.querySelector("#revenueExpense1Description"),
+  revenueExpense1: document.querySelector("#revenueExpense1"),
+  revenueExpense2Description: document.querySelector("#revenueExpense2Description"),
+  revenueExpense2: document.querySelector("#revenueExpense2"),
+  revenueExpense3Description: document.querySelector("#revenueExpense3Description"),
+  revenueExpense3: document.querySelector("#revenueExpense3"),
+  revenueOrders: document.querySelector("#revenueOrders"),
+  revenueOtherToggle: document.querySelector("#revenueOtherToggle"),
+  revenueOtherObservationWrap: document.querySelector("#revenueOtherObservationWrap"),
+  revenueOtherObservation: document.querySelector("#revenueOtherObservation"),
+  revenueTotals: document.querySelector("#revenueTotals"),
+  resetRevenueFormButton: document.querySelector("#resetRevenueFormButton"),
+  refreshRevenueButton: document.querySelector("#refreshRevenueButton"),
+  revenueFeedback: document.querySelector("#revenueFeedback"),
+  revenueList: document.querySelector("#revenueList"),
   userForm: document.querySelector("#userForm"),
   userId: document.querySelector("#userId"),
   userName: document.querySelector("#userName"),
@@ -76,6 +103,12 @@ elements.statusFilter.addEventListener("change", render);
 elements.categoryFilter.addEventListener("change", render);
 elements.clearFiltersButton.addEventListener("click", clearManagerFilters);
 elements.inventoryBody.addEventListener("click", handleTableAction);
+elements.revenueForm.addEventListener("submit", saveRevenueRecord);
+elements.revenueForm.addEventListener("input", updateRevenueTotals);
+elements.revenueOtherToggle.addEventListener("change", toggleRevenueOtherObservation);
+elements.resetRevenueFormButton.addEventListener("click", resetRevenueForm);
+elements.refreshRevenueButton.addEventListener("click", fetchRevenueRecords);
+elements.revenueList.addEventListener("click", handleRevenueAction);
 elements.userForm.addEventListener("submit", saveUser);
 elements.resetUserFormButton.addEventListener("click", resetUserForm);
 elements.refreshUsersButton.addEventListener("click", fetchUsers);
@@ -98,7 +131,9 @@ elements.countRecordList.addEventListener("click", handleCountRecordClick);
 render();
 checkNotionStatus();
 fetchCountRecords();
+fetchRevenueRecords();
 fetchUsers();
+resetRevenueForm();
 
 setManagerView("resumo");
 
@@ -243,6 +278,190 @@ function renderSummary() {
   elements.lowStockItems.textContent = String(lowStock);
   elements.expiringItems.textContent = String(expiring);
   elements.stockValue.textContent = formatCurrency(value);
+}
+
+async function fetchRevenueRecords() {
+  elements.revenueFeedback.textContent = "A carregar faturação...";
+  try {
+    const response = await fetch("/api/revenue-records");
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao carregar faturação.");
+    revenueRecords = result.records || [];
+    renderRevenueRecords();
+    elements.revenueFeedback.textContent = `${revenueRecords.length} registos de faturação.`;
+  } catch (error) {
+    revenueRecords = [];
+    renderRevenueRecords();
+    elements.revenueFeedback.textContent = error.message || "Erro ao carregar faturação.";
+  }
+}
+
+async function saveRevenueRecord(event) {
+  event.preventDefault();
+  const payload = getRevenuePayload();
+  elements.revenueFeedback.textContent = "A guardar faturação...";
+
+  try {
+    const response = await fetch("/api/revenue-records/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ record: payload }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao guardar faturação.");
+    revenueRecords = result.records || [];
+    renderRevenueRecords();
+    resetRevenueForm();
+    if (result.notion?.synced) {
+      elements.revenueFeedback.textContent = "Faturação guardada e sincronizada com o Notion.";
+    } else if (result.notion?.configured === false) {
+      elements.revenueFeedback.textContent = "Faturação guardada. Configure NOTION_REVENUE_DATABASE_ID para sincronizar com o Notion.";
+    } else {
+      elements.revenueFeedback.textContent = `Faturação guardada localmente. Notion: ${result.notion?.error || "não sincronizado."}`;
+    }
+  } catch (error) {
+    elements.revenueFeedback.textContent = error.message || "Erro ao guardar faturação.";
+  }
+}
+
+function getRevenuePayload() {
+  return {
+    id: elements.revenueId.value,
+    date: elements.revenueDate.value,
+    coins: numberValue(elements.revenueCoins.value),
+    mbway: numberValue(elements.revenueMbway.value),
+    uberEats: numberValue(elements.revenueUberEats.value),
+    glovo: numberValue(elements.revenueGlovo.value),
+    bolt: numberValue(elements.revenueBolt.value),
+    multibanco: numberValue(elements.revenueMultibanco.value),
+    cash: numberValue(elements.revenueCash.value),
+    fuel: numberValue(elements.revenueFuel.value),
+    expenses: [
+      { description: elements.revenueExpense1Description.value.trim(), amount: numberValue(elements.revenueExpense1.value) },
+      { description: elements.revenueExpense2Description.value.trim(), amount: numberValue(elements.revenueExpense2.value) },
+      { description: elements.revenueExpense3Description.value.trim(), amount: numberValue(elements.revenueExpense3.value) },
+    ],
+    orders: numberValue(elements.revenueOrders.value),
+    dayNotes: [...elements.revenueForm.querySelectorAll("input[name='dayNotes']:checked")].map((input) => input.value),
+    otherObservation: elements.revenueOtherObservation.value.trim(),
+  };
+}
+
+function updateRevenueTotals() {
+  const payload = getRevenuePayload();
+  const gross = payload.coins + payload.mbway + payload.uberEats + payload.glovo + payload.bolt + payload.multibanco + payload.cash;
+  const expenses = payload.fuel + payload.expenses.reduce((total, expense) => total + expense.amount, 0);
+  elements.revenueTotals.querySelector('[data-field="gross"]').textContent = formatCurrency(gross);
+  elements.revenueTotals.querySelector('[data-field="expenses"]').textContent = formatCurrency(expenses);
+  elements.revenueTotals.querySelector('[data-field="net"]').textContent = formatCurrency(gross - expenses);
+  toggleRevenueOtherObservation();
+}
+
+function renderRevenueRecords() {
+  elements.revenueList.innerHTML = "";
+  if (revenueRecords.length === 0) {
+    elements.revenueList.innerHTML = '<div class="empty-state"><h3>Sem faturação</h3><p>Guarda o primeiro fecho diário acima.</p></div>';
+    return;
+  }
+
+  for (const record of revenueRecords.slice(0, 60)) {
+    const entry = document.createElement("article");
+    entry.className = "revenue-record";
+    const notes = Array.isArray(record.dayNotes) && record.dayNotes.length ? record.dayNotes.join(", ") : "Sem obs";
+    entry.innerHTML = `
+      <div>
+        <strong>${formatDate(record.date)}</strong>
+        <span>${escapeHtml(notes)} | ${formatNumber(record.orders)} pedidos</span>
+      </div>
+      <div>
+        <strong>${formatCurrency(record.grossTotal || 0)}</strong>
+        <span>Total faturação</span>
+      </div>
+      <div>
+        <strong>${formatCurrency(record.expenseTotal || 0)}</strong>
+        <span>Despesas</span>
+      </div>
+      <div>
+        <strong>${formatCurrency(record.netTotal || 0)}</strong>
+        <span>Líquido</span>
+      </div>
+      <div class="row-actions">
+        <button class="icon-button" data-action="edit-revenue" data-id="${escapeHtml(record.id)}" type="button">Editar</button>
+        <button class="icon-button danger" data-action="delete-revenue" data-id="${escapeHtml(record.id)}" type="button">Apagar</button>
+      </div>
+    `;
+    elements.revenueList.appendChild(entry);
+  }
+}
+
+function handleRevenueAction(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  if (button.dataset.action === "edit-revenue") fillRevenueForm(button.dataset.id);
+  if (button.dataset.action === "delete-revenue") deleteRevenueRecord(button.dataset.id);
+}
+
+function fillRevenueForm(id) {
+  const record = revenueRecords.find((entry) => entry.id === id);
+  if (!record) return;
+  elements.revenueId.value = record.id;
+  elements.revenueDate.value = record.date;
+  elements.revenueCoins.value = valueForInput(record.coins);
+  elements.revenueMbway.value = valueForInput(record.mbway);
+  elements.revenueUberEats.value = valueForInput(record.uberEats);
+  elements.revenueGlovo.value = valueForInput(record.glovo);
+  elements.revenueBolt.value = valueForInput(record.bolt);
+  elements.revenueMultibanco.value = valueForInput(record.multibanco);
+  elements.revenueCash.value = valueForInput(record.cash);
+  elements.revenueFuel.value = valueForInput(record.fuel);
+  elements.revenueExpense1Description.value = record.expenses?.[0]?.description || "";
+  elements.revenueExpense1.value = valueForInput(record.expenses?.[0]?.amount);
+  elements.revenueExpense2Description.value = record.expenses?.[1]?.description || "";
+  elements.revenueExpense2.value = valueForInput(record.expenses?.[1]?.amount);
+  elements.revenueExpense3Description.value = record.expenses?.[2]?.description || "";
+  elements.revenueExpense3.value = valueForInput(record.expenses?.[2]?.amount);
+  elements.revenueOrders.value = valueForInput(record.orders);
+  for (const input of elements.revenueForm.querySelectorAll("input[name='dayNotes']")) {
+    input.checked = (record.dayNotes || []).includes(input.value);
+  }
+  elements.revenueOtherObservation.value = record.otherObservation || "";
+  updateRevenueTotals();
+  elements.revenueFeedback.textContent = `A editar faturação de ${formatDate(record.date)}.`;
+  elements.revenueDate.focus();
+}
+
+function resetRevenueForm() {
+  elements.revenueForm.reset();
+  elements.revenueId.value = "";
+  elements.revenueDate.value = todayDateText();
+  elements.revenueOtherObservationWrap.hidden = true;
+  updateRevenueTotals();
+}
+
+async function deleteRevenueRecord(id) {
+  if (!confirm("Apagar este registo de faturação?")) return;
+  try {
+    const response = await fetch("/api/revenue-records/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao apagar faturação.");
+    revenueRecords = result.records || [];
+    renderRevenueRecords();
+    elements.revenueFeedback.textContent = "Registo de faturação apagado.";
+  } catch (error) {
+    elements.revenueFeedback.textContent = error.message || "Erro ao apagar faturação.";
+  }
+}
+
+function toggleRevenueOtherObservation() {
+  elements.revenueOtherObservationWrap.hidden = !elements.revenueOtherToggle.checked;
+}
+
+function valueForInput(value) {
+  return numberValue(value) ? String(numberValue(value)) : "";
 }
 
 function renderTable() {
@@ -1067,6 +1286,13 @@ function formatDate(dateText) {
 
 function formatDateTime(dateText) {
   return new Intl.DateTimeFormat("pt-PT", { dateStyle: "short", timeStyle: "short" }).format(new Date(dateText));
+}
+
+function todayDateText() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
 }
 
 function normalizeDate(value) {
