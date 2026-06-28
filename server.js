@@ -17,6 +17,8 @@ const USERS_PATH = path.join(DATA_DIR, "app-users.json");
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const sessions = new Map();
 const DEFAULT_USERS = [
+  { name: "Paulo Vasconcelos", username: "paulo.vasconcelos", sector: "Gestao", role: "manager", password: "1234" },
+  { name: "Vanessa Vasconcelos", username: "vanessa.vasconcelos", sector: "Gestao", role: "manager", password: "1234" },
   { name: "João", username: "joao", sector: "Sala", role: "employee", password: "1234" },
   { name: "Darlan", username: "darlan", sector: "Sala", role: "employee", password: "1234" },
   { name: "Camila", username: "camila", sector: "Sala", role: "employee", password: "1234" },
@@ -837,8 +839,8 @@ function parseAppUsers(rawValue) {
 }
 
 function ensureUserStore() {
-  if (fs.existsSync(USERS_PATH)) return;
-  const users = [];
+  const users = readUserStoreFile();
+  let changed = !fs.existsSync(USERS_PATH);
   for (const user of [...DEFAULT_USERS, ...parseAppUsers(process.env.APP_USERS || "")]) {
     const username = normalizeUsername(user.username || user.name);
     if (!username || users.some((entry) => entry.username === username)) continue;
@@ -855,8 +857,9 @@ function ensureUserStore() {
     };
     setUserPassword(record, user.password || "1234");
     users.push(record);
+    changed = true;
   }
-  writeUsers(users);
+  if (changed) writeUsers(users);
 }
 
 function ensureDataDir() {
@@ -866,6 +869,15 @@ function ensureDataDir() {
 function readUsers() {
   try {
     if (!fs.existsSync(USERS_PATH)) ensureUserStore();
+    return readUserStoreFile();
+  } catch {
+    return [];
+  }
+}
+
+function readUserStoreFile() {
+  try {
+    if (!fs.existsSync(USERS_PATH)) return [];
     const users = JSON.parse(fs.readFileSync(USERS_PATH, "utf8"));
     return Array.isArray(users) ? users : [];
   } catch {
