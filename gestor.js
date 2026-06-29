@@ -78,6 +78,7 @@ const elements = {
   invoiceNotes: document.querySelector("#invoiceNotes"),
   resetInvoiceFormButton: document.querySelector("#resetInvoiceFormButton"),
   refreshInvoicesButton: document.querySelector("#refreshInvoicesButton"),
+  syncInvoicesButton: document.querySelector("#syncInvoicesButton"),
   invoiceFeedback: document.querySelector("#invoiceFeedback"),
   invoiceList: document.querySelector("#invoiceList"),
   userForm: document.querySelector("#userForm"),
@@ -141,6 +142,7 @@ elements.invoiceForm.addEventListener("submit", saveInvoiceRecord);
 elements.invoiceFile.addEventListener("change", uploadInvoiceFile);
 elements.resetInvoiceFormButton.addEventListener("click", resetInvoiceForm);
 elements.refreshInvoicesButton.addEventListener("click", fetchInvoiceRecords);
+elements.syncInvoicesButton.addEventListener("click", syncInvoiceRecords);
 elements.invoiceList.addEventListener("click", handleInvoiceAction);
 elements.invoiceList.addEventListener("change", handleInvoiceStatusChange);
 elements.userForm.addEventListener("submit", saveUser);
@@ -610,6 +612,21 @@ async function fetchInvoiceRecords() {
     invoiceRecords = [];
     renderInvoiceRecords();
     elements.invoiceFeedback.textContent = error.message || "Erro ao carregar faturas.";
+  }
+}
+
+async function syncInvoiceRecords() {
+  elements.invoiceFeedback.textContent = "A sincronizar faturas com o Notion...";
+  try {
+    const response = await fetch("/api/invoices/sync", { method: "POST" });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao sincronizar faturas.");
+    invoiceRecords = result.records || [];
+    renderInvoiceRecords();
+    const failed = result.failed ? ` ${result.failed} com erro.` : "";
+    elements.invoiceFeedback.textContent = `${result.synced || 0} faturas sincronizadas com o Notion.${failed}`;
+  } catch (error) {
+    elements.invoiceFeedback.textContent = error.message || "Erro ao sincronizar faturas.";
   }
 }
 

@@ -357,6 +357,13 @@ h2 {
   margin-bottom: 16px;
 }
 
+.toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 form,
 .toolbar {
   display: grid;
@@ -1342,6 +1349,11 @@ dialog::backdrop {
   .purchase-summary {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .toolbar-actions {
+    justify-content: flex-start;
+    width: 100%;
   }
 
   .order-pill {

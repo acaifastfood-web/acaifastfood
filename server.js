@@ -235,6 +235,10 @@ http
         return await handleSaveInvoiceRecord(request, response);
       }
 
+      if (requestPath === "/api/invoices/sync" && request.method === "POST") {
+        return await handleSyncInvoiceRecords(response);
+      }
+
       if (requestPath === "/api/invoices/status" && request.method === "POST") {
         return await handleUpdateInvoiceStatus(request, response);
       }
@@ -407,6 +411,22 @@ async function handleSaveInvoiceRecord(request, response) {
 
   const notion = await syncInvoiceRecordToNotion(record);
   return sendJson(response, 200, { record, records: readInvoiceRecords().slice(0, 180), notion });
+}
+
+async function handleSyncInvoiceRecords(response) {
+  const records = readInvoiceRecords();
+  const results = [];
+  let synced = 0;
+  let failed = 0;
+
+  for (const record of records) {
+    const notion = await syncInvoiceRecordToNotion(record);
+    if (notion.synced) synced += 1;
+    else failed += 1;
+    results.push({ id: record.id, title: record.title, notion });
+  }
+
+  return sendJson(response, 200, { synced, failed, results, records: readInvoiceRecords().slice(0, 180) });
 }
 
 async function handleUpdateInvoiceStatus(request, response) {
@@ -787,12 +807,13 @@ async function syncRevenueRecordToNotion(record) {
 }
 
 async function syncInvoiceRecordToNotion(record) {
-  if (!NOTION_TOKEN || !NOTION_INVOICE_DATABASE_ID) {
+  const invoiceDatabaseId = await resolveInvoiceDatabaseId();
+  if (!NOTION_TOKEN || !invoiceDatabaseId) {
     return { configured: false, synced: false, message: "NOTION_INVOICE_DATABASE_ID nao configurado." };
   }
 
   try {
-    const dataSourceRef = await resolveDataSource(NOTION_INVOICE_DATABASE_ID);
+    const dataSourceRef = await resolveDataSource(invoiceDatabaseId);
     const dataSource = dataSourceRef.dataSource;
     const properties = dataSource.properties || {};
     const titleProperty = findInvoiceTitleProperty(properties);
@@ -819,6 +840,23 @@ async function syncInvoiceRecordToNotion(record) {
   } catch (error) {
     return { configured: true, synced: false, error: friendlyNotionError(error.message) };
   }
+}
+
+async function resolveInvoiceDatabaseId() {
+  const configuredId = String(NOTION_INVOICE_DATABASE_ID || "").trim();
+  if (isUsableNotionId(configuredId)) return configuredId;
+  if (!NOTION_TOKEN) return "";
+
+  const databases = await searchDatabases();
+  const exactMatch = databases.find((database) => normalizeTextKey(database.title) === "faturas a pagar");
+  if (exactMatch) return exactMatch.id;
+  const likelyMatch = databases.find((database) => normalizeTextKey(database.title).includes("fatura"));
+  return likelyMatch?.id || "";
+}
+
+function isUsableNotionId(value) {
+  const id = String(value || "").trim();
+  return /^[a-f0-9]{32}$/i.test(id) || /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id);
 }
 
 async function findRevenuePageByDate(dataSourceId, properties, date, titlePropertyName) {
