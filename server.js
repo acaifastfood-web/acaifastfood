@@ -1353,9 +1353,12 @@ async function extractInvoiceDraft(fileName, buffer, contentType) {
   if (isImage && OPENAI_API_KEY) {
     try {
       const aiDraft = await extractInvoiceDraftWithOpenAI(fileName, buffer, contentType);
+      const mergedDraft = mergeInvoiceDrafts(draft, aiDraft);
       return {
-        draft: mergeInvoiceDrafts(draft, aiDraft),
-        message: "Arquivo guardado. A foto foi lida por IA; confirma os campos antes de guardar.",
+        draft: mergedDraft,
+        message: hasInvoiceDraftData(mergedDraft)
+          ? "Arquivo guardado. A foto foi lida por IA; confirma os campos antes de guardar."
+          : "Arquivo guardado. A IA analisou a foto, mas não encontrou dados confiáveis. Preenche os campos manualmente ou tenta uma foto mais nítida.",
       };
     } catch (error) {
       const fallbackMessage = foundAny
@@ -1421,6 +1424,8 @@ function mergeInvoiceDrafts(localDraft, aiDraft) {
   }
   return {
     ...merged,
+    supplier: cleanInvoiceIdentityValue(merged.supplier),
+    invoiceNumber: cleanInvoiceIdentityValue(merged.invoiceNumber),
     amount: moneyValue(merged.amount),
     vat: moneyValue(merged.vat),
     issueDate: normalizeLooseDate(merged.issueDate),
@@ -1489,14 +1494,14 @@ async function extractInvoiceDraftWithOpenAIModel(fileName, buffer, contentType,
   try {
     parsed = parseJsonObject(text);
   } catch (error) {
-    const draftFromText = buildInvoiceDraftFromText(text, fileName);
+    const draftFromText = mergeInvoiceDrafts(emptyInvoiceDraft(), buildInvoiceDraftFromText(text, ""));
     if (hasInvoiceDraftData(draftFromText)) return draftFromText;
     throw new Error(`A IA respondeu num formato inesperado. ${text ? `Resposta: ${text.slice(0, 220)}` : "Resposta vazia."}`);
   }
 
   return {
-    supplier: cleanTextValue(parsed.supplier),
-    invoiceNumber: cleanTextValue(parsed.invoiceNumber),
+    supplier: cleanInvoiceIdentityValue(parsed.supplier),
+    invoiceNumber: cleanInvoiceIdentityValue(parsed.invoiceNumber),
     issueDate: normalizeLooseDate(parsed.issueDate),
     dueDate: normalizeLooseDate(parsed.dueDate),
     amount: moneyValue(parsed.amount),
@@ -1660,6 +1665,23 @@ function cleanTextValue(value) {
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 120);
+}
+
+function cleanInvoiceIdentityValue(value) {
+  const cleaned = cleanTextValue(value);
+  if (!cleaned) return "";
+  if (looksLikeGeneratedFileToken(cleaned)) return "";
+  return cleaned;
+}
+
+function looksLikeGeneratedFileToken(value) {
+  const compact = String(value || "")
+    .toLowerCase()
+    .replace(/\.(jpe?g|png|webp|heic|heif|pdf)$/i, "")
+    .replace(/[^a-z0-9]/g, "");
+  if (compact.length >= 24 && /^[a-f0-9]+$/.test(compact)) return true;
+  if (/^[a-f0-9]{8}[a-f0-9]{4}[a-f0-9]{4}[a-f0-9]{4}[a-f0-9]{12}$/.test(compact)) return true;
+  return false;
 }
 
 function normalizeLooseDate(value) {
