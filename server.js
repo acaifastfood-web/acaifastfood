@@ -861,7 +861,7 @@ function buildInvoiceNotionProperties(record, databaseProperties, titlePropertyN
   for (const [propertyName, value] of Object.entries(values)) {
     const property = databaseProperties[propertyName];
     if (!property) continue;
-    const serialized = serializeInvoiceProperty(property.type, value);
+    const serialized = serializeInvoiceProperty(property, value);
     if (serialized) notionProperties[propertyName] = serialized;
   }
   return notionProperties;
@@ -882,7 +882,8 @@ function findInvoiceTitleProperty(properties) {
   return findTitleProperty(properties);
 }
 
-function serializeInvoiceProperty(type, value) {
+function serializeInvoiceProperty(property, value) {
+  const type = typeof property === "string" ? property : property?.type;
   if (type === "files") {
     const url = typeof value === "object" ? value.url : String(value || "");
     const name = typeof value === "object" ? value.name : "Fatura";
@@ -892,7 +893,32 @@ function serializeInvoiceProperty(type, value) {
     const url = typeof value === "object" ? value.url : String(value || "");
     return { url: url || null };
   }
+  if (type === "status") {
+    const status = invoiceStatusForNotion(property, value);
+    return status ? { status: { name: status } } : { status: null };
+  }
   return serializeProperty(type, typeof value === "object" ? value.url || "" : value);
+}
+
+function invoiceStatusForNotion(property, value) {
+  const normalized = normalizeInvoiceStatus(value);
+  const options = property?.status?.options || [];
+  const optionNames = options.map((option) => option.name).filter(Boolean);
+  const aliases = {
+    Pendente: ["Pendente", "Agendado", "Aberto", "Em aberto"],
+    Pago: ["Pago", "Paga", "Paid"],
+    "Por pagar": ["Por pagar", "A pagar", "Atrasado", "Vencido"],
+  };
+  return findFirstMatchingOption(optionNames, aliases[normalized] || [normalized]) || normalized;
+}
+
+function findFirstMatchingOption(options, candidates) {
+  const normalizedOptions = new Map(options.map((name) => [normalizeTextKey(name), name]));
+  for (const candidate of candidates) {
+    const match = normalizedOptions.get(normalizeTextKey(candidate));
+    if (match) return match;
+  }
+  return "";
 }
 
 function buildRevenueNotionProperties(record, databaseProperties, titlePropertyName) {
@@ -1034,7 +1060,7 @@ async function searchDatabases() {
 
   do {
     const body = {
-      filter: { property: "object", value: "database" },
+      filter: { property: "object", value: "data_source" },
       page_size: 100,
     };
     if (cursor) body.start_cursor = cursor;
@@ -1943,24 +1969,25 @@ function normalizeUsername(value) {
     .replace(/[^a-z0-9._-]+/g, ".");
 }
 
-function normalizeSector(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  const normalized = raw
+function normalizeTextKey(value) {
+  return String(value || "")
+    .trim()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
+}
+
+function normalizeSector(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const normalized = normalizeTextKey(raw);
   if (normalized.startsWith("gest")) return "Gestao";
   if (normalized.startsWith("coz")) return "Cozinha";
   return "Sala";
 }
 
 function normalizeRole(value) {
-  const normalized = String(value || "")
-    .trim()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
+  const normalized = normalizeTextKey(value);
   return normalized === "manager" || normalized.startsWith("gest") || normalized.startsWith("admin") ? "manager" : "employee";
 }
 
