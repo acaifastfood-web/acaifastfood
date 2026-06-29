@@ -12,6 +12,8 @@ const NOTION_TOKEN = process.env.NOTION_TOKEN || "";
 const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || "";
 const NOTION_REVENUE_DATABASE_ID = process.env.NOTION_REVENUE_DATABASE_ID || "";
 const NOTION_INVOICE_DATABASE_ID = process.env.NOTION_INVOICE_DATABASE_ID || "";
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-5-mini";
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
 ensureDataDir();
 const COUNT_RECORDS_PATH = path.join(DATA_DIR, "count-records.json");
@@ -380,7 +382,7 @@ async function handleUploadInvoiceFile(request, response) {
     url: absoluteUrl(request, fileUrlPath),
     uploadedAt: new Date().toISOString(),
   };
-  const extraction = extractInvoiceDraft(file.originalName, buffer, contentType);
+  const extraction = await extractInvoiceDraft(file.originalName, buffer, contentType);
   return sendJson(response, 200, { file, draft: extraction.draft, extractionMessage: extraction.message });
 }
 
@@ -1340,10 +1342,44 @@ function absoluteUrl(request, pathname) {
   return `${protocol}://${host}${pathname}`;
 }
 
-function extractInvoiceDraft(fileName, buffer, contentType) {
+async function extractInvoiceDraft(fileName, buffer, contentType) {
+  const isImage = contentType.startsWith("image/");
   const text = contentType === "application/pdf" ? extractReadablePdfText(buffer) : "";
   const source = `${fileName}\n${text}`.slice(0, 30000);
-  const draft = {
+  const draft = isImage ? emptyInvoiceDraft() : buildInvoiceDraftFromText(source, fileName);
+  const foundAny = hasInvoiceDraftData(draft);
+
+  if (isImage && OPENAI_API_KEY) {
+    try {
+      const aiDraft = await extractInvoiceDraftWithOpenAI(fileName, buffer, contentType);
+      return {
+        draft: mergeInvoiceDrafts(draft, aiDraft),
+        message: "Arquivo guardado. A foto foi lida por IA; confirma os campos antes de guardar.",
+      };
+    } catch (error) {
+      const fallbackMessage = foundAny
+        ? "Arquivo guardado. A leitura por IA falhou, mas alguns campos foram preenchidos pelo nome do arquivo."
+        : "Arquivo guardado. A leitura por IA falhou; preenche os campos manualmente por enquanto.";
+      return { draft, message: `${fallbackMessage} ${friendlyOpenAIError(error.message)}`.trim() };
+    }
+  }
+
+  if (isImage && !OPENAI_API_KEY) {
+    return {
+      draft,
+      message:
+        "Arquivo guardado. Para ler fotos automaticamente, configure OPENAI_API_KEY no Render/local. Preenche os campos manualmente por enquanto.",
+    };
+  }
+
+  const message = foundAny
+    ? "Arquivo guardado. Alguns campos foram preenchidos automaticamente; confirma antes de guardar."
+    : "Arquivo guardado. Nao consegui ler dados suficientes automaticamente; preenche ou confirma os campos antes de guardar.";
+  return { draft, message };
+}
+
+function buildInvoiceDraftFromText(source, fileName) {
+  return {
     supplier: guessSupplier(source, fileName),
     invoiceNumber: matchFirst(source, [
       /(?:fatura|factura|invoice|doc\.?|documento)\s*(?:n[ºo.]?|numero|number)?\s*[:#-]?\s*([a-z0-9][a-z0-9./_-]{2,})/i,
@@ -1357,12 +1393,122 @@ function extractInvoiceDraft(fileName, buffer, contentType) {
     category: "Geral",
     notes: "",
   };
+}
 
-  const foundAny = Object.entries(draft).some(([key, value]) => !["status", "category", "notes"].includes(key) && value);
-  const message = foundAny
-    ? "Arquivo guardado. Alguns campos foram preenchidos automaticamente; confirma antes de guardar."
-    : "Arquivo guardado. Nao consegui ler dados suficientes automaticamente; preenche ou confirma os campos antes de guardar.";
-  return { draft, message };
+function emptyInvoiceDraft() {
+  return {
+    supplier: "",
+    invoiceNumber: "",
+    issueDate: "",
+    dueDate: "",
+    amount: 0,
+    vat: 0,
+    status: "Pendente",
+    category: "Geral",
+    notes: "",
+  };
+}
+
+function hasInvoiceDraftData(draft) {
+  return Object.entries(draft).some(([key, value]) => !["status", "category", "notes"].includes(key) && Boolean(value));
+}
+
+function mergeInvoiceDrafts(localDraft, aiDraft) {
+  const merged = { ...localDraft };
+  for (const [key, value] of Object.entries(aiDraft || {})) {
+    if (value !== undefined && value !== null && value !== "") merged[key] = value;
+  }
+  return {
+    ...merged,
+    amount: moneyValue(merged.amount),
+    vat: moneyValue(merged.vat),
+    issueDate: normalizeLooseDate(merged.issueDate),
+    dueDate: normalizeLooseDate(merged.dueDate),
+    status: normalizeInvoiceStatus(merged.status, normalizeLooseDate(merged.dueDate)),
+    category: cleanTextValue(merged.category || "Geral") || "Geral",
+  };
+}
+
+async function extractInvoiceDraftWithOpenAI(fileName, buffer, contentType) {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: OPENAI_VISION_MODEL,
+      max_output_tokens: 700,
+      input: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text:
+                "Lê esta foto de fatura/recibo de fornecedor em Portugal. Responde apenas com JSON valido, sem markdown, com estas chaves: supplier, invoiceNumber, issueDate, dueDate, amount, vat, status, category, notes. Datas em YYYY-MM-DD. Valores numericos em euros com ponto decimal. Se nao tiver certeza, usa string vazia ou 0. status deve ser Pendente, Pago ou Atrasado.",
+            },
+            {
+              type: "input_image",
+              image_url: `data:${contentType};base64,${buffer.toString("base64")}`,
+              detail: "high",
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error?.message || payload.message || `Erro OpenAI ${response.status}`);
+  }
+
+  const text = responseOutputText(payload);
+  const parsed = parseJsonObject(text);
+  return {
+    supplier: cleanTextValue(parsed.supplier),
+    invoiceNumber: cleanTextValue(parsed.invoiceNumber),
+    issueDate: normalizeLooseDate(parsed.issueDate),
+    dueDate: normalizeLooseDate(parsed.dueDate),
+    amount: moneyValue(parsed.amount),
+    vat: moneyValue(parsed.vat),
+    status: normalizeInvoiceStatus(parsed.status, normalizeLooseDate(parsed.dueDate)),
+    category: cleanTextValue(parsed.category || "Geral") || "Geral",
+    notes: cleanTextValue(parsed.notes),
+  };
+}
+
+function responseOutputText(payload) {
+  if (payload.output_text) return String(payload.output_text);
+  const parts = [];
+  for (const output of payload.output || []) {
+    for (const content of output.content || []) {
+      if (content.type === "output_text" && content.text) parts.push(content.text);
+      else if (content.text) parts.push(content.text);
+    }
+  }
+  return parts.join("\n").trim();
+}
+
+function parseJsonObject(text) {
+  const cleaned = String(text || "")
+    .trim()
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/i, "")
+    .trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) throw new Error("A IA nao devolveu JSON valido.");
+  return JSON.parse(cleaned.slice(start, end + 1));
+}
+
+function friendlyOpenAIError(message) {
+  const raw = String(message || "");
+  if (raw.includes("Incorrect API key") || raw.includes("invalid_api_key")) return "Confirma a OPENAI_API_KEY.";
+  if (raw.includes("model") && raw.includes("does not exist")) return "Confirma o OPENAI_VISION_MODEL.";
+  if (raw.includes("quota") || raw.includes("billing")) return "Confirma saldo/billing da conta OpenAI.";
+  return raw ? `Detalhe: ${raw}` : "";
 }
 
 function extractReadablePdfText(buffer) {
