@@ -14,6 +14,7 @@ const NOTION_REVENUE_DATABASE_ID = process.env.NOTION_REVENUE_DATABASE_ID || "";
 const NOTION_INVOICE_DATABASE_ID = process.env.NOTION_INVOICE_DATABASE_ID || "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-5-mini";
+const OPENAI_VISION_FALLBACK_MODELS = ["gpt-5.5", "gpt-4.1-mini"];
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
 ensureDataDir();
 const COUNT_RECORDS_PATH = path.join(DATA_DIR, "count-records.json");
@@ -1430,6 +1431,22 @@ function mergeInvoiceDrafts(localDraft, aiDraft) {
 }
 
 async function extractInvoiceDraftWithOpenAI(fileName, buffer, contentType) {
+  const models = uniqueValues([OPENAI_VISION_MODEL, ...OPENAI_VISION_FALLBACK_MODELS]);
+  let lastError = null;
+
+  for (const model of models) {
+    try {
+      return await extractInvoiceDraftWithOpenAIModel(fileName, buffer, contentType, model);
+    } catch (error) {
+      lastError = error;
+      if (!isOpenAIModelError(error.message)) break;
+    }
+  }
+
+  throw lastError || new Error("Nao foi possivel ler a imagem com IA.");
+}
+
+async function extractInvoiceDraftWithOpenAIModel(fileName, buffer, contentType, model) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -1437,7 +1454,7 @@ async function extractInvoiceDraftWithOpenAI(fileName, buffer, contentType) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: OPENAI_VISION_MODEL,
+      model,
       max_output_tokens: 700,
       input: [
         {
@@ -1479,6 +1496,18 @@ async function extractInvoiceDraftWithOpenAI(fileName, buffer, contentType) {
   };
 }
 
+function uniqueValues(values) {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function isOpenAIModelError(message) {
+  const raw = String(message || "").toLowerCase();
+  return (
+    raw.includes("model") &&
+    (raw.includes("does not exist") || raw.includes("not found") || raw.includes("not have access") || raw.includes("unsupported"))
+  );
+}
+
 function responseOutputText(payload) {
   if (payload.output_text) return String(payload.output_text);
   const parts = [];
@@ -1505,9 +1534,17 @@ function parseJsonObject(text) {
 
 function friendlyOpenAIError(message) {
   const raw = String(message || "");
-  if (raw.includes("Incorrect API key") || raw.includes("invalid_api_key")) return "Confirma a OPENAI_API_KEY.";
-  if (raw.includes("model") && raw.includes("does not exist")) return "Confirma o OPENAI_VISION_MODEL.";
-  if (raw.includes("quota") || raw.includes("billing")) return "Confirma saldo/billing da conta OpenAI.";
+  const lower = raw.toLowerCase();
+  if (lower.includes("incorrect api key") || lower.includes("invalid_api_key") || lower.includes("unauthorized")) {
+    return "A chave OpenAI parece inválida. Confirma a OPENAI_API_KEY no Render, sem espaços antes/depois.";
+  }
+  if (isOpenAIModelError(raw)) {
+    return "O modelo de IA configurado não está disponível para a tua conta. Remove OPENAI_VISION_MODEL ou usa gpt-5.5.";
+  }
+  if (lower.includes("quota") || lower.includes("billing") || lower.includes("insufficient_quota")) {
+    return "A conta OpenAI parece sem saldo/billing ativo. Confirma o Billing no OpenAI Platform.";
+  }
+  if (lower.includes("rate limit")) return "A OpenAI limitou temporariamente os pedidos. Tenta novamente em instantes.";
   return raw ? `Detalhe: ${raw}` : "";
 }
 
