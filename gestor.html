@@ -39,6 +39,7 @@
         <aside class="manager-sidebar" aria-label="Navegacao do gestor">
           <button class="sidebar-button active" data-view-target="resumo" type="button">Resumo</button>
           <button class="sidebar-button" data-view-target="faturacao" type="button">Faturação</button>
+          <button class="sidebar-button" data-view-target="faturas" type="button">Faturas</button>
           <button class="sidebar-button" data-view-target="pedidos" type="button">Pedidos</button>
           <button class="sidebar-button" data-view-target="funcionarios" type="button">Funcionarios</button>
           <button class="sidebar-button" data-view-target="inventario" type="button">Inventario</button>
@@ -191,6 +192,85 @@
             <div class="user-feedback" id="revenueFeedback"></div>
             <div class="whatsapp-share" id="revenueWhatsappShare" hidden></div>
             <div class="revenue-list" id="revenueList"></div>
+          </section>
+
+          <section class="panel invoice-panel manager-view" data-view="faturas" hidden>
+            <div class="panel-heading">
+              <div>
+                <h2>Faturas a pagar</h2>
+                <p class="panel-subtitle">Upload, conferência, arquivo e sincronização com o Notion.</p>
+              </div>
+              <button class="button ghost" id="refreshInvoicesButton" type="button">Atualizar faturas</button>
+            </div>
+
+            <form class="invoice-form" id="invoiceForm" autocomplete="off">
+              <input id="invoiceId" type="hidden" />
+              <input id="invoiceFileUrl" type="hidden" />
+              <input id="invoiceOriginalFileName" type="hidden" />
+              <input id="invoiceStoredFileName" type="hidden" />
+              <input id="invoiceContentType" type="hidden" />
+              <input id="invoiceFileSize" type="hidden" />
+
+              <div class="invoice-upload-row">
+                <label class="invoice-upload">
+                  Foto ou PDF da fatura
+                  <input id="invoiceFile" type="file" accept="application/pdf,image/*" />
+                </label>
+                <div class="invoice-file-info" id="invoiceFileInfo">Nenhum arquivo selecionado.</div>
+              </div>
+
+              <div class="invoice-grid">
+                <label>
+                  Fornecedor
+                  <input id="invoiceSupplier" name="supplier" type="text" />
+                </label>
+                <label>
+                  Nº da fatura
+                  <input id="invoiceNumber" name="invoiceNumber" type="text" />
+                </label>
+                <label>
+                  Data da fatura
+                  <input id="invoiceIssueDate" name="issueDate" type="date" />
+                </label>
+                <label>
+                  Vencimento
+                  <input id="invoiceDueDate" name="dueDate" type="date" />
+                </label>
+                <label>
+                  Valor
+                  <input id="invoiceAmount" name="amount" type="number" min="0" step="0.01" />
+                </label>
+                <label>
+                  IVA
+                  <input id="invoiceVat" name="vat" type="number" min="0" step="0.01" />
+                </label>
+                <label>
+                  Estado
+                  <select id="invoiceStatus" name="status">
+                    <option value="Pendente">Pendente</option>
+                    <option value="Pago">Pago</option>
+                    <option value="Atrasado">Atrasado</option>
+                  </select>
+                </label>
+                <label>
+                  Categoria
+                  <input id="invoiceCategory" name="category" type="text" value="Geral" />
+                </label>
+              </div>
+
+              <label>
+                Observações
+                <textarea id="invoiceNotes" name="notes" rows="3"></textarea>
+              </label>
+
+              <div class="row-actions">
+                <button class="button primary" type="submit">Guardar fatura</button>
+                <button class="button ghost" id="resetInvoiceFormButton" type="button">Limpar</button>
+              </div>
+            </form>
+
+            <div class="user-feedback" id="invoiceFeedback"></div>
+            <div class="invoice-list" id="invoiceList"></div>
           </section>
 
       <section class="panel user-panel manager-view" data-view="funcionarios" hidden>

@@ -2,3 +2,5 @@
 count-records.json
 app-users.json
 faturacao-records.json
+invoice-records.json
+invoice-files/

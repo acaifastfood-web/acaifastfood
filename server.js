@@ -11,11 +11,16 @@ const NOTION_VERSION = process.env.NOTION_VERSION || "2026-03-11";
 const NOTION_TOKEN = process.env.NOTION_TOKEN || "";
 const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || "";
 const NOTION_REVENUE_DATABASE_ID = process.env.NOTION_REVENUE_DATABASE_ID || "";
+const NOTION_INVOICE_DATABASE_ID = process.env.NOTION_INVOICE_DATABASE_ID || "";
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
 ensureDataDir();
 const COUNT_RECORDS_PATH = path.join(DATA_DIR, "count-records.json");
 const REVENUE_RECORDS_PATH = path.join(DATA_DIR, "faturacao-records.json");
+const INVOICE_RECORDS_PATH = path.join(DATA_DIR, "invoice-records.json");
+const INVOICE_FILES_DIR = path.join(DATA_DIR, "invoice-files");
 const USERS_PATH = path.join(DATA_DIR, "app-users.json");
+const MAX_INVOICE_FILE_BYTES = 8 * 1024 * 1024;
+ensureDir(INVOICE_FILES_DIR);
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const sessions = new Map();
 const DEFAULT_USERS = [
@@ -98,88 +103,141 @@ const REVENUE_PROPERTY_ALIASES = {
   netTotal: ["Total Líquido", "Total Liquido"],
 };
 
+const INVOICE_PROPERTY_NAMES = {
+  title: process.env.NOTION_INVOICE_PROPERTY_TITLE || "Fatura",
+  supplier: process.env.NOTION_INVOICE_PROPERTY_SUPPLIER || "Fornecedor",
+  invoiceNumber: process.env.NOTION_INVOICE_PROPERTY_NUMBER || "Nº da fatura",
+  issueDate: process.env.NOTION_INVOICE_PROPERTY_ISSUE_DATE || "Data da fatura",
+  dueDate: process.env.NOTION_INVOICE_PROPERTY_DUE_DATE || "Vencimento",
+  amount: process.env.NOTION_INVOICE_PROPERTY_AMOUNT || "Valor",
+  vat: process.env.NOTION_INVOICE_PROPERTY_VAT || "IVA",
+  status: process.env.NOTION_INVOICE_PROPERTY_STATUS || "Estado",
+  category: process.env.NOTION_INVOICE_PROPERTY_CATEGORY || "Categoria",
+  notes: process.env.NOTION_INVOICE_PROPERTY_NOTES || "Observações",
+  file: process.env.NOTION_INVOICE_PROPERTY_FILE || "Arquivo",
+  originalFileName: process.env.NOTION_INVOICE_PROPERTY_ORIGINAL_FILE || "Arquivo original",
+  createdAt: process.env.NOTION_INVOICE_PROPERTY_CREATED_AT || "Criado em",
+  updatedAt: process.env.NOTION_INVOICE_PROPERTY_UPDATED_AT || "Atualizado em",
+};
+
+const INVOICE_PROPERTY_ALIASES = {
+  title: ["Fatura", "Factura", "Nome"],
+  invoiceNumber: ["Nº da fatura", "Numero da fatura", "Número da fatura", "Nº da factura", "Numero da factura"],
+  issueDate: ["Data da fatura", "Data da factura", "Emissão", "Emissao"],
+  dueDate: ["Vencimento", "Data de vencimento", "Prazo"],
+  amount: ["Valor", "Total", "Total a pagar"],
+  vat: ["IVA", "Iva"],
+  notes: ["Observações", "Observacoes", "Notas"],
+  file: ["Arquivo", "Ficheiro", "Anexo"],
+};
+
 const MIME_TYPES = {
   ".html": "text/html;charset=utf-8",
   ".css": "text/css;charset=utf-8",
   ".js": "application/javascript;charset=utf-8",
   ".json": "application/json;charset=utf-8",
   ".csv": "text/csv;charset=utf-8",
+  ".pdf": "application/pdf",
   ".ico": "image/x-icon",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".heic": "image/heic",
   ".svg": "image/svg+xml",
 };
 
 http
   .createServer(async (request, response) => {
     try {
-      if (request.url === "/api/notion/status" && request.method === "GET") {
+      const requestPath = new URL(request.url, `http://localhost:${PORT}`).pathname;
+
+      if (requestPath === "/api/notion/status" && request.method === "GET") {
         return sendJson(response, 200, { configured: isNotionConfigured() });
       }
 
-      if (request.url === "/api/notion/databases" && request.method === "GET") {
+      if (requestPath === "/api/notion/databases" && request.method === "GET") {
         return await handleListDatabases(response);
       }
 
-      if (request.url === "/api/notion/items" && request.method === "GET") {
+      if (requestPath === "/api/notion/items" && request.method === "GET") {
         return await handleNotionItems(response);
       }
 
-      if (request.url === "/api/notion/sync" && request.method === "POST") {
+      if (requestPath === "/api/notion/sync" && request.method === "POST") {
         return await handleNotionSync(request, response);
       }
 
-      if (request.url === "/api/auth/login" && request.method === "POST") {
+      if (requestPath === "/api/auth/login" && request.method === "POST") {
         return await handleLogin(request, response);
       }
 
-      if (request.url === "/api/auth/session" && request.method === "POST") {
+      if (requestPath === "/api/auth/session" && request.method === "POST") {
         return await handleSession(request, response);
       }
 
-      if (request.url === "/api/auth/logout" && request.method === "POST") {
+      if (requestPath === "/api/auth/logout" && request.method === "POST") {
         return await handleLogout(request, response);
       }
 
-      if (request.url === "/api/users" && request.method === "GET") {
+      if (requestPath === "/api/users" && request.method === "GET") {
         return handleUsers(response);
       }
 
-      if (request.url === "/api/users/save" && request.method === "POST") {
+      if (requestPath === "/api/users/save" && request.method === "POST") {
         return await handleSaveUser(request, response);
       }
 
-      if (request.url === "/api/users/delete" && request.method === "POST") {
+      if (requestPath === "/api/users/delete" && request.method === "POST") {
         return await handleDeleteUser(request, response);
       }
 
-      if (request.url === "/api/users/toggle" && request.method === "POST") {
+      if (requestPath === "/api/users/toggle" && request.method === "POST") {
         return await handleToggleUser(request, response);
       }
 
-      if (request.url === "/api/users/reset-password" && request.method === "POST") {
+      if (requestPath === "/api/users/reset-password" && request.method === "POST") {
         return await handleResetUserPassword(request, response);
       }
 
-      if (request.url === "/api/count-records" && request.method === "GET") {
+      if (requestPath === "/api/count-records" && request.method === "GET") {
         return handleCountRecords(response);
       }
 
-      if (request.url === "/api/count-records/item-status" && request.method === "POST") {
+      if (requestPath === "/api/count-records/item-status" && request.method === "POST") {
         return await handleCountRecordItemStatus(request, response);
       }
 
-      if (request.url === "/api/revenue-records" && request.method === "GET") {
+      if (requestPath === "/api/revenue-records" && request.method === "GET") {
         return handleRevenueRecords(response);
       }
 
-      if (request.url === "/api/revenue-records/save" && request.method === "POST") {
+      if (requestPath === "/api/revenue-records/save" && request.method === "POST") {
         return await handleSaveRevenueRecord(request, response);
       }
 
-      if (request.url === "/api/revenue-records/delete" && request.method === "POST") {
+      if (requestPath === "/api/revenue-records/delete" && request.method === "POST") {
         return await handleDeleteRevenueRecord(request, response);
+      }
+
+      if (requestPath === "/api/invoices" && request.method === "GET") {
+        return handleInvoiceRecords(response);
+      }
+
+      if (requestPath === "/api/invoices/upload" && request.method === "POST") {
+        return await handleUploadInvoiceFile(request, response);
+      }
+
+      if (requestPath === "/api/invoices/save" && request.method === "POST") {
+        return await handleSaveInvoiceRecord(request, response);
+      }
+
+      if (requestPath === "/api/invoices/delete" && request.method === "POST") {
+        return await handleDeleteInvoiceRecord(request, response);
+      }
+
+      if (requestPath.startsWith("/api/invoice-files/") && request.method === "GET") {
+        return serveInvoiceFile(request, response);
       }
 
       return serveStatic(request, response);
@@ -281,6 +339,74 @@ async function handleDeleteRevenueRecord(request, response) {
   const id = String(body.id || "");
   const records = readRevenueRecords().filter((record) => record.id !== id);
   writeRevenueRecords(records);
+  return sendJson(response, 200, { records: records.slice(0, 180) });
+}
+
+function handleInvoiceRecords(response) {
+  const records = readInvoiceRecords().slice(0, 180);
+  return sendJson(response, 200, { records });
+}
+
+async function handleUploadInvoiceFile(request, response) {
+  const body = await readJson(request, MAX_INVOICE_FILE_BYTES * 2);
+  const fileName = String(body.fileName || "fatura").trim();
+  const dataUrl = String(body.dataUrl || "");
+  const parsed = parseDataUrl(dataUrl);
+  if (!parsed) return sendJson(response, 400, { error: "Arquivo invalido." });
+
+  const contentType = String(body.contentType || parsed.contentType || "application/octet-stream").toLowerCase();
+  if (!isAllowedInvoiceContentType(contentType)) {
+    return sendJson(response, 400, { error: "Envia apenas PDF ou imagem." });
+  }
+
+  const buffer = Buffer.from(parsed.base64, "base64");
+  if (buffer.length === 0) return sendJson(response, 400, { error: "Arquivo vazio." });
+  if (buffer.length > MAX_INVOICE_FILE_BYTES) {
+    return sendJson(response, 400, { error: "Arquivo muito grande. Usa PDF/foto ate 8 MB." });
+  }
+
+  const id = crypto.randomUUID();
+  const safeName = safeFileName(fileName, contentType);
+  const storedName = `${id}-${safeName}`;
+  fs.writeFileSync(path.join(INVOICE_FILES_DIR, storedName), buffer);
+
+  const fileUrlPath = `/api/invoice-files/${encodeURIComponent(storedName)}`;
+  const file = {
+    id,
+    originalName: fileName || safeName,
+    storedName,
+    contentType,
+    size: buffer.length,
+    url: absoluteUrl(request, fileUrlPath),
+    uploadedAt: new Date().toISOString(),
+  };
+  const extraction = extractInvoiceDraft(file.originalName, buffer, contentType);
+  return sendJson(response, 200, { file, draft: extraction.draft, extractionMessage: extraction.message });
+}
+
+async function handleSaveInvoiceRecord(request, response) {
+  const body = await readJson(request);
+  const record = normalizeInvoiceRecord(body.record || body);
+  record.updatedAt = new Date().toISOString();
+  const records = readInvoiceRecords();
+  const index = records.findIndex((entry) => entry.id === record.id);
+  if (index >= 0) {
+    record.createdAt = records[index].createdAt || record.createdAt;
+    records[index] = record;
+  } else {
+    records.unshift(record);
+  }
+  writeInvoiceRecords(records);
+
+  const notion = await syncInvoiceRecordToNotion(record);
+  return sendJson(response, 200, { record, records: readInvoiceRecords().slice(0, 180), notion });
+}
+
+async function handleDeleteInvoiceRecord(request, response) {
+  const body = await readJson(request);
+  const id = String(body.id || "");
+  const records = readInvoiceRecords().filter((record) => record.id !== id);
+  writeInvoiceRecords(records);
   return sendJson(response, 200, { records: records.slice(0, 180) });
 }
 
@@ -537,6 +663,54 @@ function normalizeRevenueRecord(rawRecord) {
   return normalized;
 }
 
+function normalizeInvoiceRecord(rawRecord) {
+  const now = new Date().toISOString();
+  const dueDate = normalizeLooseDate(rawRecord.dueDate);
+  const status = normalizeInvoiceStatus(rawRecord.status, dueDate);
+  const supplier = String(rawRecord.supplier || "").trim();
+  const invoiceNumber = String(rawRecord.invoiceNumber || "").trim();
+  const originalFileName = String(rawRecord.originalFileName || rawRecord.fileName || "").trim();
+  const title = String(rawRecord.title || invoiceTitle({ supplier, invoiceNumber, originalFileName })).trim();
+
+  return {
+    id: String(rawRecord.id || crypto.randomUUID()),
+    title,
+    supplier,
+    invoiceNumber,
+    issueDate: normalizeLooseDate(rawRecord.issueDate),
+    dueDate,
+    amount: moneyValue(rawRecord.amount),
+    vat: moneyValue(rawRecord.vat),
+    status,
+    category: String(rawRecord.category || "Geral").trim() || "Geral",
+    notes: String(rawRecord.notes || "").trim(),
+    fileUrl: String(rawRecord.fileUrl || "").trim(),
+    originalFileName,
+    storedFileName: String(rawRecord.storedFileName || "").trim(),
+    contentType: String(rawRecord.contentType || "").trim(),
+    fileSize: Math.max(0, Math.round(numberValue(rawRecord.fileSize))),
+    createdAt: rawRecord.createdAt || now,
+    updatedAt: rawRecord.updatedAt || now,
+  };
+}
+
+function normalizeInvoiceStatus(status, dueDate) {
+  const raw = String(status || "").trim();
+  if (raw === "Pago") return "Pago";
+  if (dueDate && daysUntil(dueDate) < 0) return "Atrasado";
+  if (["Pendente", "Atrasado"].includes(raw)) return raw;
+  return "Pendente";
+}
+
+function invoiceTitle(record) {
+  const supplier = String(record.supplier || "").trim();
+  const number = String(record.invoiceNumber || "").trim();
+  if (supplier && number) return `${supplier} - ${number}`;
+  if (supplier) return supplier;
+  if (number) return `Fatura ${number}`;
+  return String(record.originalFileName || "Fatura a pagar").trim();
+}
+
 function normalizeDayNotes(value) {
   const allowed = new Set(["Fraco", "Forte", "Chuva", "Vento", "Outros"]);
   const entries = Array.isArray(value) ? value : String(value || "").split(",");
@@ -588,6 +762,41 @@ async function syncRevenueRecordToNotion(record) {
   }
 }
 
+async function syncInvoiceRecordToNotion(record) {
+  if (!NOTION_TOKEN || !NOTION_INVOICE_DATABASE_ID) {
+    return { configured: false, synced: false, message: "NOTION_INVOICE_DATABASE_ID nao configurado." };
+  }
+
+  try {
+    const dataSourceRef = await resolveDataSource(NOTION_INVOICE_DATABASE_ID);
+    const dataSource = dataSourceRef.dataSource;
+    const properties = dataSource.properties || {};
+    const titleProperty = findInvoiceTitleProperty(properties);
+    if (!titleProperty) throw new Error("A database de faturas precisa de uma propriedade de titulo.");
+
+    const notionProperties = buildInvoiceNotionProperties(record, properties, titleProperty.name);
+    const existingPage = await findPageByTitle(dataSourceRef.id, titleProperty.name, record.title);
+    if (existingPage) {
+      await notionRequest(`/pages/${existingPage.id}`, {
+        method: "PATCH",
+        body: { properties: notionProperties },
+      });
+      return { configured: true, synced: true, action: "updated", databaseTitle: dataSourceRef.title };
+    }
+
+    await notionRequest("/pages", {
+      method: "POST",
+      body: {
+        parent: { data_source_id: dataSourceRef.id },
+        properties: notionProperties,
+      },
+    });
+    return { configured: true, synced: true, action: "created", databaseTitle: dataSourceRef.title };
+  } catch (error) {
+    return { configured: true, synced: false, error: friendlyNotionError(error.message) };
+  }
+}
+
 async function findRevenuePageByDate(dataSourceId, properties, date, titlePropertyName) {
   const datePropertyName = revenuePropertyName("date", properties);
   if (properties[datePropertyName]?.type === "date") {
@@ -605,6 +814,61 @@ async function findRevenuePageByDate(dataSourceId, properties, date, titleProper
   }
 
   return findPageByTitle(dataSourceId, titlePropertyName, revenueTitle(date));
+}
+
+function buildInvoiceNotionProperties(record, databaseProperties, titlePropertyName) {
+  const values = {};
+  setInvoicePropertyValue(values, databaseProperties, "supplier", record.supplier);
+  setInvoicePropertyValue(values, databaseProperties, "invoiceNumber", record.invoiceNumber);
+  setInvoicePropertyValue(values, databaseProperties, "issueDate", record.issueDate);
+  setInvoicePropertyValue(values, databaseProperties, "dueDate", record.dueDate);
+  setInvoicePropertyValue(values, databaseProperties, "amount", record.amount);
+  setInvoicePropertyValue(values, databaseProperties, "vat", record.vat);
+  setInvoicePropertyValue(values, databaseProperties, "status", record.status);
+  setInvoicePropertyValue(values, databaseProperties, "category", record.category);
+  setInvoicePropertyValue(values, databaseProperties, "notes", record.notes);
+  setInvoicePropertyValue(values, databaseProperties, "file", { url: record.fileUrl, name: record.originalFileName || record.title });
+  setInvoicePropertyValue(values, databaseProperties, "originalFileName", record.originalFileName);
+  setInvoicePropertyValue(values, databaseProperties, "createdAt", record.createdAt);
+  setInvoicePropertyValue(values, databaseProperties, "updatedAt", record.updatedAt);
+  values[titlePropertyName] = record.title;
+
+  const notionProperties = {};
+  for (const [propertyName, value] of Object.entries(values)) {
+    const property = databaseProperties[propertyName];
+    if (!property) continue;
+    const serialized = serializeInvoiceProperty(property.type, value);
+    if (serialized) notionProperties[propertyName] = serialized;
+  }
+  return notionProperties;
+}
+
+function setInvoicePropertyValue(values, databaseProperties, key, value) {
+  values[invoicePropertyName(key, databaseProperties)] = value;
+}
+
+function invoicePropertyName(key, properties) {
+  const candidates = [INVOICE_PROPERTY_NAMES[key], ...(INVOICE_PROPERTY_ALIASES[key] || [])].filter(Boolean);
+  return candidates.find((name) => properties[name]) || INVOICE_PROPERTY_NAMES[key];
+}
+
+function findInvoiceTitleProperty(properties) {
+  const configured = properties[INVOICE_PROPERTY_NAMES.title];
+  if (configured?.type === "title") return { name: INVOICE_PROPERTY_NAMES.title, property: configured };
+  return findTitleProperty(properties);
+}
+
+function serializeInvoiceProperty(type, value) {
+  if (type === "files") {
+    const url = typeof value === "object" ? value.url : String(value || "");
+    const name = typeof value === "object" ? value.name : "Fatura";
+    return url ? { files: [{ name: String(name || "Fatura").slice(0, 100), type: "external", external: { url } }] } : { files: [] };
+  }
+  if (type === "url") {
+    const url = typeof value === "object" ? value.url : String(value || "");
+    return { url: url || null };
+  }
+  return serializeProperty(type, typeof value === "object" ? value.url || "" : value);
 }
 
 function buildRevenueNotionProperties(record, databaseProperties, titlePropertyName) {
@@ -975,6 +1239,27 @@ function isMissingNotionDataSourceError(message) {
   return String(message || "").includes("Could not find data source") || String(message || "").includes("Could not find data_source");
 }
 
+function serveInvoiceFile(request, response) {
+  const url = new URL(request.url, `http://localhost:${PORT}`);
+  const storedName = decodeURIComponent(url.pathname.replace("/api/invoice-files/", ""));
+  const filePath = path.normalize(path.join(INVOICE_FILES_DIR, path.basename(storedName)));
+  const relativePath = path.relative(INVOICE_FILES_DIR, filePath);
+
+  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    return sendText(response, 403, "Acesso negado");
+  }
+
+  fs.readFile(filePath, (error, data) => {
+    if (error) return sendText(response, 404, "Ficheiro nao encontrado");
+    const type = MIME_TYPES[path.extname(filePath).toLowerCase()] || "application/octet-stream";
+    response.writeHead(200, {
+      "Content-Type": type,
+      "Content-Disposition": `inline; filename="${path.basename(filePath).replace(/"/g, "")}"`,
+    });
+    response.end(data);
+  });
+}
+
 function serveStatic(request, response) {
   const url = new URL(request.url, `http://localhost:${PORT}`);
   const requestedPath = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
@@ -993,12 +1278,12 @@ function serveStatic(request, response) {
   });
 }
 
-function readJson(request) {
+function readJson(request, limit = 1_000_000) {
   return new Promise((resolve, reject) => {
     let body = "";
     request.on("data", (chunk) => {
       body += chunk;
-      if (body.length > 1_000_000) {
+      if (body.length > limit) {
         request.destroy();
         reject(new Error("Pedido demasiado grande"));
       }
@@ -1012,6 +1297,142 @@ function readJson(request) {
     });
     request.on("error", reject);
   });
+}
+
+function parseDataUrl(dataUrl) {
+  const match = String(dataUrl || "").match(/^data:([^;]+);base64,(.+)$/);
+  if (match) return { contentType: match[1], base64: match[2] };
+  if (/^[a-z0-9+/=\s]+$/i.test(dataUrl || "")) return { contentType: "", base64: dataUrl };
+  return null;
+}
+
+function isAllowedInvoiceContentType(contentType) {
+  return ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"].includes(contentType);
+}
+
+function safeFileName(fileName, contentType) {
+  const extension = extensionForInvoiceFile(fileName, contentType);
+  const base = path
+    .basename(fileName || "fatura")
+    .replace(/\.[^.]+$/, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9._-]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+  return `${base || "fatura"}${extension}`;
+}
+
+function extensionForInvoiceFile(fileName, contentType) {
+  const current = path.extname(fileName || "").toLowerCase();
+  if ([".pdf", ".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"].includes(current)) return current;
+  if (contentType === "application/pdf") return ".pdf";
+  if (contentType === "image/png") return ".png";
+  if (contentType === "image/webp") return ".webp";
+  if (contentType === "image/heic") return ".heic";
+  if (contentType === "image/heif") return ".heif";
+  return ".jpg";
+}
+
+function absoluteUrl(request, pathname) {
+  const protocol = String(request.headers["x-forwarded-proto"] || "").split(",")[0] || "http";
+  const host = String(request.headers["x-forwarded-host"] || request.headers.host || `localhost:${PORT}`).split(",")[0];
+  return `${protocol}://${host}${pathname}`;
+}
+
+function extractInvoiceDraft(fileName, buffer, contentType) {
+  const text = contentType === "application/pdf" ? extractReadablePdfText(buffer) : "";
+  const source = `${fileName}\n${text}`.slice(0, 30000);
+  const draft = {
+    supplier: guessSupplier(source, fileName),
+    invoiceNumber: matchFirst(source, [
+      /(?:fatura|factura|invoice|doc\.?|documento)\s*(?:n[ºo.]?|numero|number)?\s*[:#-]?\s*([a-z0-9][a-z0-9./_-]{2,})/i,
+      /\b(?:ft|fac|inv)[\s.-]*([a-z0-9./_-]{3,})\b/i,
+    ]),
+    issueDate: findDateNear(source, /(data\s*(?:da)?\s*(?:fatura|factura|emissao|emissão)|invoice\s*date)/i),
+    dueDate: findDateNear(source, /(vencimento|data\s*de\s*vencimento|due\s*date|pagamento\s*ate|pagamento\s*até)/i),
+    amount: findMoneyNear(source, /(total\s*(?:a\s*pagar)?|valor\s*(?:total)?|amount\s*due)/i),
+    vat: findMoneyNear(source, /\b(iva|vat)\b/i),
+    status: "Pendente",
+    category: "Geral",
+    notes: "",
+  };
+
+  const foundAny = Object.entries(draft).some(([key, value]) => !["status", "category", "notes"].includes(key) && value);
+  const message = foundAny
+    ? "Arquivo guardado. Alguns campos foram preenchidos automaticamente; confirma antes de guardar."
+    : "Arquivo guardado. Nao consegui ler dados suficientes automaticamente; preenche ou confirma os campos antes de guardar.";
+  return { draft, message };
+}
+
+function extractReadablePdfText(buffer) {
+  const utfText = buffer.toString("utf8");
+  const latinText = buffer.toString("latin1");
+  return `${utfText}\n${latinText}`
+    .replace(/\\[rn]/g, "\n")
+    .replace(/[^\x09\x0a\x0d\x20-\x7e\u00a0-\u00ff€]/g, " ")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+function guessSupplier(source, fileName) {
+  const supplier = matchFirst(source, [
+    /(?:fornecedor|supplier|emitente)\s*[:#-]?\s*([^\n\r|]{3,80})/i,
+    /(?:de|from)\s*[:#-]\s*([^\n\r|]{3,80})/i,
+  ]);
+  if (supplier) return cleanTextValue(supplier);
+
+  const fromFile = path
+    .basename(fileName || "", path.extname(fileName || ""))
+    .replace(/\b(fatura|factura|invoice|recibo|pdf|jpg|jpeg|png|fornecedor)\b/gi, "")
+    .replace(/\b(?:ft|fac|inv)[-_.\s]*[a-z0-9._-]+/gi, "")
+    .replace(/\d{2,4}[-_.]\d{1,2}[-_.]\d{1,4}/g, "")
+    .replace(/[-_.]+/g, " ")
+    .trim();
+  return cleanTextValue(fromFile);
+}
+
+function matchFirst(source, expressions) {
+  for (const expression of expressions) {
+    const match = source.match(expression);
+    if (match?.[1]) return cleanTextValue(match[1]);
+  }
+  return "";
+}
+
+function findDateNear(source, labelExpression) {
+  const match = source.match(new RegExp(`${labelExpression.source}[\\s\\S]{0,80}?((?:\\d{4}[-/]\\d{1,2}[-/]\\d{1,2})|(?:\\d{1,2}[-/]\\d{1,2}[-/]\\d{2,4}))`, "i"));
+  if (match) return normalizeLooseDate(match[match.length - 1]);
+
+  const fallback = source.match(/\b((?:\d{4}[-/]\d{1,2}[-/]\d{1,2})|(?:\d{1,2}[-/]\d{1,2}[-/]\d{2,4}))\b/);
+  return fallback?.[1] ? normalizeLooseDate(fallback[1]) : "";
+}
+
+function findMoneyNear(source, labelExpression) {
+  const match = source.match(new RegExp(`${labelExpression.source}[\\s\\S]{0,80}?([0-9]{1,3}(?:[ .][0-9]{3})*(?:,[0-9]{2})|[0-9]+(?:\\.[0-9]{2})?)`, "i"));
+  return match ? moneyValue(match[match.length - 1]) : 0;
+}
+
+function cleanTextValue(value) {
+  return String(value || "")
+    .replace(/[|()[\]{}]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+}
+
+function normalizeLooseDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const iso = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (iso) return `${iso[1]}-${iso[2].padStart(2, "0")}-${iso[3].padStart(2, "0")}`;
+  const local = raw.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
+  if (!local) return "";
+  const year = local[3].length === 2 ? `20${local[3]}` : local[3];
+  return `${year}-${local[2].padStart(2, "0")}-${local[1].padStart(2, "0")}`;
 }
 
 function normalizeItem(item) {
@@ -1119,6 +1540,10 @@ function ensureUserStore() {
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+function ensureDir(dirPath) {
+  if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
 }
 
 function readUsers() {
@@ -1308,6 +1733,38 @@ function readRevenueRecords() {
 
 function writeRevenueRecords(records) {
   fs.writeFileSync(REVENUE_RECORDS_PATH, JSON.stringify(records.slice(0, 500), null, 2));
+}
+
+function readInvoiceRecords() {
+  try {
+    if (!fs.existsSync(INVOICE_RECORDS_PATH)) return [];
+    const records = JSON.parse(fs.readFileSync(INVOICE_RECORDS_PATH, "utf8"));
+    if (!Array.isArray(records)) return [];
+    let changed = false;
+    const normalizedRecords = records.map((record) => {
+      const normalized = normalizeInvoiceRecord(record);
+      if (!record.id || !("title" in record) || !("status" in record)) changed = true;
+      return normalized;
+    });
+    if (changed) writeInvoiceRecords(normalizedRecords);
+    return normalizedRecords.sort((a, b) => {
+      const statusPriority = invoiceStatusPriority(a.status) - invoiceStatusPriority(b.status);
+      if (statusPriority !== 0) return statusPriority;
+      return (a.dueDate || "9999-12-31").localeCompare(b.dueDate || "9999-12-31") || b.updatedAt.localeCompare(a.updatedAt);
+    });
+  } catch {
+    return [];
+  }
+}
+
+function writeInvoiceRecords(records) {
+  fs.writeFileSync(INVOICE_RECORDS_PATH, JSON.stringify(records.slice(0, 500), null, 2));
+}
+
+function invoiceStatusPriority(status) {
+  if (status === "Atrasado") return 0;
+  if (status === "Pendente") return 1;
+  return 2;
 }
 
 function isNotionConfigured() {

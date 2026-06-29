@@ -665,6 +665,94 @@ td span {
   font-size: 0.84rem;
 }
 
+.invoice-panel {
+  margin-bottom: 18px;
+}
+
+.invoice-form {
+  display: grid;
+  gap: 14px;
+}
+
+.invoice-upload-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(220px, 1fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.invoice-upload input {
+  margin-top: 7px;
+}
+
+.invoice-file-info {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfa;
+  color: var(--muted);
+  padding: 10px;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.invoice-file-info a,
+.invoice-record a {
+  color: var(--accent);
+  font-weight: 900;
+}
+
+.invoice-file-info span {
+  display: block;
+  margin-top: 3px;
+}
+
+.invoice-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.invoice-list {
+  display: grid;
+  gap: 10px;
+}
+
+.invoice-record {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) minmax(110px, 0.55fr) minmax(120px, 0.6fr) minmax(130px, 0.6fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-left-width: 5px;
+  border-radius: 8px;
+  background: #fbfcfa;
+  padding: 12px;
+}
+
+.invoice-record.pending {
+  border-left-color: #d98c28;
+}
+
+.invoice-record.overdue {
+  border-left-color: var(--danger);
+}
+
+.invoice-record.paid {
+  border-left-color: var(--ok);
+}
+
+.invoice-record strong,
+.invoice-record span {
+  display: block;
+}
+
+.invoice-record span {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
 .check-field {
   align-items: center;
   display: flex;
@@ -1160,6 +1248,9 @@ dialog::backdrop {
   .field-row,
   .user-form,
   .user-row,
+  .invoice-grid,
+  .invoice-record,
+  .invoice-upload-row,
   .revenue-grid,
   .expense-grid,
   .revenue-totals,

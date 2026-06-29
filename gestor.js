@@ -12,6 +12,7 @@ let movements = load(MOVEMENTS_KEY, []);
 let selectedPurchaseIds = new Set(load(PURCHASE_SELECTION_KEY, []));
 let countRecords = [];
 let revenueRecords = [];
+let invoiceRecords = [];
 
 const elements = {
   form: document.querySelector("#itemForm"),
@@ -57,6 +58,28 @@ const elements = {
   revenueFeedback: document.querySelector("#revenueFeedback"),
   revenueWhatsappShare: document.querySelector("#revenueWhatsappShare"),
   revenueList: document.querySelector("#revenueList"),
+  invoiceForm: document.querySelector("#invoiceForm"),
+  invoiceId: document.querySelector("#invoiceId"),
+  invoiceFileUrl: document.querySelector("#invoiceFileUrl"),
+  invoiceOriginalFileName: document.querySelector("#invoiceOriginalFileName"),
+  invoiceStoredFileName: document.querySelector("#invoiceStoredFileName"),
+  invoiceContentType: document.querySelector("#invoiceContentType"),
+  invoiceFileSize: document.querySelector("#invoiceFileSize"),
+  invoiceFile: document.querySelector("#invoiceFile"),
+  invoiceFileInfo: document.querySelector("#invoiceFileInfo"),
+  invoiceSupplier: document.querySelector("#invoiceSupplier"),
+  invoiceNumber: document.querySelector("#invoiceNumber"),
+  invoiceIssueDate: document.querySelector("#invoiceIssueDate"),
+  invoiceDueDate: document.querySelector("#invoiceDueDate"),
+  invoiceAmount: document.querySelector("#invoiceAmount"),
+  invoiceVat: document.querySelector("#invoiceVat"),
+  invoiceStatus: document.querySelector("#invoiceStatus"),
+  invoiceCategory: document.querySelector("#invoiceCategory"),
+  invoiceNotes: document.querySelector("#invoiceNotes"),
+  resetInvoiceFormButton: document.querySelector("#resetInvoiceFormButton"),
+  refreshInvoicesButton: document.querySelector("#refreshInvoicesButton"),
+  invoiceFeedback: document.querySelector("#invoiceFeedback"),
+  invoiceList: document.querySelector("#invoiceList"),
   userForm: document.querySelector("#userForm"),
   userId: document.querySelector("#userId"),
   userName: document.querySelector("#userName"),
@@ -114,6 +137,11 @@ elements.revenueOtherToggle.addEventListener("change", toggleRevenueOtherObserva
 elements.resetRevenueFormButton.addEventListener("click", resetRevenueForm);
 elements.refreshRevenueButton.addEventListener("click", fetchRevenueRecords);
 elements.revenueList.addEventListener("click", handleRevenueAction);
+elements.invoiceForm.addEventListener("submit", saveInvoiceRecord);
+elements.invoiceFile.addEventListener("change", uploadInvoiceFile);
+elements.resetInvoiceFormButton.addEventListener("click", resetInvoiceForm);
+elements.refreshInvoicesButton.addEventListener("click", fetchInvoiceRecords);
+elements.invoiceList.addEventListener("click", handleInvoiceAction);
 elements.userForm.addEventListener("submit", saveUser);
 elements.resetUserFormButton.addEventListener("click", resetUserForm);
 elements.refreshUsersButton.addEventListener("click", fetchUsers);
@@ -137,8 +165,10 @@ render();
 checkNotionStatus();
 fetchCountRecords();
 fetchRevenueRecords();
+fetchInvoiceRecords();
 fetchUsers();
 resetRevenueForm();
+resetInvoiceForm();
 
 setManagerView("resumo");
 
@@ -564,6 +594,241 @@ async function deleteRevenueRecord(id) {
 
 function toggleRevenueOtherObservation() {
   elements.revenueOtherObservationWrap.hidden = !elements.revenueOtherToggle.checked;
+}
+
+async function fetchInvoiceRecords() {
+  elements.invoiceFeedback.textContent = "A carregar faturas...";
+  try {
+    const response = await fetch("/api/invoices");
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao carregar faturas.");
+    invoiceRecords = result.records || [];
+    renderInvoiceRecords();
+    elements.invoiceFeedback.textContent = `${invoiceRecords.length} faturas cadastradas.`;
+  } catch (error) {
+    invoiceRecords = [];
+    renderInvoiceRecords();
+    elements.invoiceFeedback.textContent = error.message || "Erro ao carregar faturas.";
+  }
+}
+
+async function uploadInvoiceFile() {
+  const file = elements.invoiceFile.files?.[0];
+  if (!file) return;
+  elements.invoiceFeedback.textContent = "A guardar arquivo e tentar leitura...";
+
+  try {
+    const dataUrl = await readFileAsDataUrl(file);
+    const response = await fetch("/api/invoices/upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fileName: file.name,
+        contentType: file.type || "application/octet-stream",
+        dataUrl,
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao guardar arquivo.");
+
+    setInvoiceFile(result.file);
+    applyInvoiceDraft(result.draft || {});
+    elements.invoiceFeedback.textContent = result.extractionMessage || "Arquivo guardado.";
+  } catch (error) {
+    elements.invoiceFeedback.textContent = error.message || "Erro ao guardar arquivo.";
+  }
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Nao consegui ler o arquivo."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function setInvoiceFile(file) {
+  elements.invoiceFileUrl.value = file?.url || "";
+  elements.invoiceOriginalFileName.value = file?.originalName || "";
+  elements.invoiceStoredFileName.value = file?.storedName || "";
+  elements.invoiceContentType.value = file?.contentType || "";
+  elements.invoiceFileSize.value = file?.size || "";
+  renderInvoiceFileInfo(file);
+}
+
+function renderInvoiceFileInfo(file) {
+  if (!file?.url) {
+    elements.invoiceFileInfo.textContent = "Nenhum arquivo selecionado.";
+    return;
+  }
+  elements.invoiceFileInfo.innerHTML = `
+    <a href="${escapeHtml(file.url)}" target="_blank" rel="noopener">${escapeHtml(file.originalName || "Arquivo")}</a>
+    <span>${formatBytes(file.size)} guardados</span>
+  `;
+}
+
+function applyInvoiceDraft(draft) {
+  setFieldIfEmpty(elements.invoiceSupplier, draft.supplier);
+  setFieldIfEmpty(elements.invoiceNumber, draft.invoiceNumber);
+  setFieldIfEmpty(elements.invoiceIssueDate, draft.issueDate);
+  setFieldIfEmpty(elements.invoiceDueDate, draft.dueDate);
+  setFieldIfEmpty(elements.invoiceAmount, valueForInput(draft.amount));
+  setFieldIfEmpty(elements.invoiceVat, valueForInput(draft.vat));
+  setFieldIfEmpty(elements.invoiceCategory, draft.category || "Geral");
+  if (draft.status) elements.invoiceStatus.value = draft.status;
+}
+
+function setFieldIfEmpty(field, value) {
+  if (!field || field.value || value === undefined || value === null || value === "") return;
+  field.value = value;
+}
+
+async function saveInvoiceRecord(event) {
+  event.preventDefault();
+  const payload = getInvoicePayload();
+  elements.invoiceFeedback.textContent = "A guardar fatura...";
+
+  try {
+    const response = await fetch("/api/invoices/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ record: payload }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao guardar fatura.");
+    invoiceRecords = result.records || [];
+    renderInvoiceRecords();
+    resetInvoiceForm();
+    if (result.notion?.synced) {
+      elements.invoiceFeedback.textContent = "Fatura guardada e sincronizada com o Notion.";
+    } else if (result.notion?.configured === false) {
+      elements.invoiceFeedback.textContent = "Fatura guardada. Configure NOTION_INVOICE_DATABASE_ID para sincronizar com o Notion.";
+    } else {
+      elements.invoiceFeedback.textContent = `Fatura guardada localmente. Notion: ${result.notion?.error || "não sincronizado."}`;
+    }
+  } catch (error) {
+    elements.invoiceFeedback.textContent = error.message || "Erro ao guardar fatura.";
+  }
+}
+
+function getInvoicePayload() {
+  return {
+    id: elements.invoiceId.value,
+    supplier: elements.invoiceSupplier.value.trim(),
+    invoiceNumber: elements.invoiceNumber.value.trim(),
+    issueDate: elements.invoiceIssueDate.value,
+    dueDate: elements.invoiceDueDate.value,
+    amount: numberValue(elements.invoiceAmount.value),
+    vat: numberValue(elements.invoiceVat.value),
+    status: elements.invoiceStatus.value,
+    category: elements.invoiceCategory.value.trim() || "Geral",
+    notes: elements.invoiceNotes.value.trim(),
+    fileUrl: elements.invoiceFileUrl.value,
+    originalFileName: elements.invoiceOriginalFileName.value,
+    storedFileName: elements.invoiceStoredFileName.value,
+    contentType: elements.invoiceContentType.value,
+    fileSize: numberValue(elements.invoiceFileSize.value),
+  };
+}
+
+function renderInvoiceRecords() {
+  elements.invoiceList.innerHTML = "";
+  if (invoiceRecords.length === 0) {
+    elements.invoiceList.innerHTML = '<div class="empty-state"><h3>Sem faturas</h3><p>Guarda a primeira fatura acima.</p></div>';
+    return;
+  }
+
+  for (const record of invoiceRecords.slice(0, 80)) {
+    const entry = document.createElement("article");
+    entry.className = `invoice-record ${invoiceStatusClass(record.status)}`;
+    entry.innerHTML = `
+      <div>
+        <strong>${escapeHtml(record.supplier || record.title || "Fatura")}</strong>
+        <span>${escapeHtml(record.invoiceNumber || "Sem numero")} | ${escapeHtml(record.category || "Geral")}</span>
+      </div>
+      <div>
+        <strong>${formatCurrency(record.amount || 0)}</strong>
+        <span>Valor</span>
+      </div>
+      <div>
+        <strong>${formatDate(record.dueDate)}</strong>
+        <span>Vencimento</span>
+      </div>
+      <div>
+        <strong>${escapeHtml(record.status || "Pendente")}</strong>
+        <span>${record.fileUrl ? `<a href="${escapeHtml(record.fileUrl)}" target="_blank" rel="noopener">Arquivo</a>` : "Sem arquivo"}</span>
+      </div>
+      <div class="row-actions">
+        <button class="icon-button" data-action="edit-invoice" data-id="${escapeHtml(record.id)}" type="button">Editar</button>
+        <button class="icon-button danger" data-action="delete-invoice" data-id="${escapeHtml(record.id)}" type="button">Apagar</button>
+      </div>
+    `;
+    elements.invoiceList.appendChild(entry);
+  }
+}
+
+function handleInvoiceAction(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  if (button.dataset.action === "edit-invoice") fillInvoiceForm(button.dataset.id);
+  if (button.dataset.action === "delete-invoice") deleteInvoiceRecord(button.dataset.id);
+}
+
+function fillInvoiceForm(id) {
+  const record = invoiceRecords.find((entry) => entry.id === id);
+  if (!record) return;
+  elements.invoiceId.value = record.id;
+  elements.invoiceSupplier.value = record.supplier || "";
+  elements.invoiceNumber.value = record.invoiceNumber || "";
+  elements.invoiceIssueDate.value = record.issueDate || "";
+  elements.invoiceDueDate.value = record.dueDate || "";
+  elements.invoiceAmount.value = valueForInput(record.amount);
+  elements.invoiceVat.value = valueForInput(record.vat);
+  elements.invoiceStatus.value = record.status || "Pendente";
+  elements.invoiceCategory.value = record.category || "Geral";
+  elements.invoiceNotes.value = record.notes || "";
+  setInvoiceFile({
+    url: record.fileUrl,
+    originalName: record.originalFileName,
+    storedName: record.storedFileName,
+    contentType: record.contentType,
+    size: record.fileSize,
+  });
+  elements.invoiceFeedback.textContent = `A editar fatura ${record.invoiceNumber || record.supplier || ""}.`;
+  elements.invoiceSupplier.focus();
+}
+
+function resetInvoiceForm() {
+  elements.invoiceForm.reset();
+  elements.invoiceId.value = "";
+  setInvoiceFile(null);
+  elements.invoiceStatus.value = "Pendente";
+  elements.invoiceCategory.value = "Geral";
+}
+
+async function deleteInvoiceRecord(id) {
+  if (!confirm("Apagar este registo de fatura? O arquivo guardado não será removido.")) return;
+  try {
+    const response = await fetch("/api/invoices/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao apagar fatura.");
+    invoiceRecords = result.records || [];
+    renderInvoiceRecords();
+    elements.invoiceFeedback.textContent = "Registo de fatura apagado.";
+  } catch (error) {
+    elements.invoiceFeedback.textContent = error.message || "Erro ao apagar fatura.";
+  }
+}
+
+function invoiceStatusClass(status) {
+  if (status === "Pago") return "paid";
+  if (status === "Atrasado") return "overdue";
+  return "pending";
 }
 
 function valueForInput(value) {
@@ -1383,6 +1648,13 @@ function formatCurrency(value) {
 
 function formatNumber(value) {
   return new Intl.NumberFormat("pt-PT", { maximumFractionDigits: 2 }).format(value);
+}
+
+function formatBytes(value) {
+  const bytes = numberValue(value);
+  if (!bytes) return "0 KB";
+  if (bytes < 1024 * 1024) return `${formatNumber(bytes / 1024)} KB`;
+  return `${formatNumber(bytes / (1024 * 1024))} MB`;
 }
 
 function formatDate(dateText) {
