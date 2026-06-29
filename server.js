@@ -14,7 +14,7 @@ const NOTION_REVENUE_DATABASE_ID = process.env.NOTION_REVENUE_DATABASE_ID || "";
 const NOTION_INVOICE_DATABASE_ID = process.env.NOTION_INVOICE_DATABASE_ID || "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-5-mini";
-const OPENAI_VISION_FALLBACK_MODELS = ["gpt-5.5", "gpt-4.1-mini"];
+const OPENAI_VISION_FALLBACK_MODELS = ["gpt-5.5", "gpt-4.1-mini", "gpt-4o-mini"];
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
 ensureDataDir();
 const COUNT_RECORDS_PATH = path.join(DATA_DIR, "count-records.json");
@@ -1485,7 +1485,15 @@ async function extractInvoiceDraftWithOpenAIModel(fileName, buffer, contentType,
   }
 
   const text = responseOutputText(payload);
-  const parsed = parseJsonObject(text);
+  let parsed;
+  try {
+    parsed = parseJsonObject(text);
+  } catch (error) {
+    const draftFromText = buildInvoiceDraftFromText(text, fileName);
+    if (hasInvoiceDraftData(draftFromText)) return draftFromText;
+    throw new Error(`A IA respondeu num formato inesperado. ${text ? `Resposta: ${text.slice(0, 220)}` : "Resposta vazia."}`);
+  }
+
   return {
     supplier: cleanTextValue(parsed.supplier),
     invoiceNumber: cleanTextValue(parsed.invoiceNumber),
@@ -1546,7 +1554,25 @@ function responseOutputText(payload) {
       else if (content.text) parts.push(content.text);
     }
   }
-  return parts.join("\n").trim();
+  if (parts.length) return parts.join("\n").trim();
+  return collectResponseStrings(payload).join("\n").trim();
+}
+
+function collectResponseStrings(value, key = "") {
+  if (!value) return [];
+  if (typeof value === "string") {
+    const usefulKeys = new Set(["text", "output_text", "content", "arguments"]);
+    if (usefulKeys.has(key) || value.trim().startsWith("{")) return [value];
+    return [];
+  }
+  if (Array.isArray(value)) return value.flatMap((entry) => collectResponseStrings(entry, key));
+  if (typeof value !== "object") return [];
+
+  const strings = [];
+  for (const [childKey, childValue] of Object.entries(value)) {
+    strings.push(...collectResponseStrings(childValue, childKey));
+  }
+  return strings;
 }
 
 function parseJsonObject(text) {
