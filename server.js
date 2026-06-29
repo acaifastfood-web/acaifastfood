@@ -1436,15 +1436,23 @@ function mergeInvoiceDrafts(localDraft, aiDraft) {
 }
 
 async function extractInvoiceDraftWithOpenAI(fileName, buffer, contentType) {
-  const models = uniqueValues([OPENAI_VISION_MODEL, ...OPENAI_VISION_FALLBACK_MODELS]);
+  const responseModels = uniqueValues([OPENAI_VISION_MODEL, ...OPENAI_VISION_FALLBACK_MODELS]);
+  const chatModels = uniqueValues(["gpt-4o-mini", "gpt-4.1-mini"]);
+  const attempts = [
+    ...responseModels.map((model) => ({ api: "responses", model })),
+    ...chatModels.map((model) => ({ api: "chat", model })),
+  ];
   let lastError = null;
 
-  for (const model of models) {
+  for (const attempt of attempts) {
     try {
-      return await extractInvoiceDraftWithOpenAIModel(fileName, buffer, contentType, model);
+      if (attempt.api === "chat") {
+        return await extractInvoiceDraftWithOpenAIChat(fileName, buffer, contentType, attempt.model);
+      }
+      return await extractInvoiceDraftWithOpenAIModel(fileName, buffer, contentType, attempt.model);
     } catch (error) {
       lastError = error;
-      if (!isOpenAIModelError(error.message)) break;
+      if (!isRetryableOpenAIExtractionError(error.message)) break;
     }
   }
 
@@ -1470,8 +1478,7 @@ async function extractInvoiceDraftWithOpenAIModel(fileName, buffer, contentType,
           content: [
             {
               type: "input_text",
-              text:
-                "Extrai os dados visiveis desta foto de fatura/recibo de fornecedor em Portugal. supplier deve ser o emissor/fornecedor, nunca o cliente. invoiceNumber deve ser apenas o numero da fatura/documento, nunca NIF, telefone, IBAN ou referencia de pagamento. issueDate e a data de emissao/data da fatura. dueDate e apenas a data marcada como vencimento/pagamento ate; se nao existir, usa string vazia. amount e o total final a pagar em euros, nao subtotal nem base tributavel. vat e apenas o valor do IVA em euros. category deve ser uma categoria curta da despesa. notes deve apontar duvidas curtas. Usa strings vazias e 0 quando um campo nao estiver claro. Datas devem ficar em YYYY-MM-DD.",
+              text: invoiceExtractionPrompt(),
             },
             {
               type: "input_image",
@@ -1499,6 +1506,62 @@ async function extractInvoiceDraftWithOpenAIModel(fileName, buffer, contentType,
     throw new Error(`A IA respondeu num formato inesperado. ${text ? `Resposta: ${text.slice(0, 220)}` : "Resposta vazia."}`);
   }
 
+  return normalizeOpenAIInvoiceDraft(parsed);
+}
+
+async function extractInvoiceDraftWithOpenAIChat(fileName, buffer, contentType, model) {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 700,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content:
+            "Responde apenas com JSON valido. Chaves obrigatorias: supplier, invoiceNumber, issueDate, dueDate, amount, vat, status, category, notes.",
+        },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: invoiceExtractionPrompt() },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${contentType};base64,${buffer.toString("base64")}`,
+                detail: "high",
+              },
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error?.message || payload.message || `Erro OpenAI ${response.status}`);
+  }
+
+  const text = String(payload.choices?.[0]?.message?.content || "").trim();
+  let parsed;
+  try {
+    parsed = parseJsonObject(text);
+  } catch (error) {
+    const draftFromText = mergeInvoiceDrafts(emptyInvoiceDraft(), buildInvoiceDraftFromText(text, ""));
+    if (hasInvoiceDraftData(draftFromText)) return draftFromText;
+    throw new Error(`A IA respondeu num formato inesperado. ${text ? `Resposta: ${text.slice(0, 220)}` : "Resposta vazia."}`);
+  }
+
+  return normalizeOpenAIInvoiceDraft(parsed);
+}
+
+function normalizeOpenAIInvoiceDraft(parsed) {
   return {
     supplier: cleanInvoiceIdentityValue(parsed.supplier),
     invoiceNumber: cleanInvoiceIdentityValue(parsed.invoiceNumber),
@@ -1510,6 +1573,10 @@ async function extractInvoiceDraftWithOpenAIModel(fileName, buffer, contentType,
     category: cleanTextValue(parsed.category || "Geral") || "Geral",
     notes: cleanTextValue(parsed.notes),
   };
+}
+
+function invoiceExtractionPrompt() {
+  return "Extrai os dados visiveis desta foto de fatura/recibo de fornecedor em Portugal. supplier deve ser o emissor/fornecedor, nunca o cliente. invoiceNumber deve ser apenas o numero da fatura/documento, nunca NIF, telefone, IBAN ou referencia de pagamento. issueDate e a data de emissao/data da fatura. dueDate e apenas a data marcada como vencimento/pagamento ate; se nao existir, usa string vazia. amount e o total final a pagar em euros, nao subtotal nem base tributavel. vat e apenas o valor do IVA em euros. category deve ser uma categoria curta da despesa. notes deve apontar duvidas curtas. Usa strings vazias e 0 quando um campo nao estiver claro. Datas devem ficar em YYYY-MM-DD.";
 }
 
 function invoiceExtractionTextFormat() {
@@ -1540,13 +1607,17 @@ function uniqueValues(values) {
   return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
 }
 
-function isOpenAIModelError(message) {
+function isRetryableOpenAIExtractionError(message) {
   const raw = String(message || "").toLowerCase();
   return (
     (raw.includes("model") &&
       (raw.includes("does not exist") || raw.includes("not found") || raw.includes("not have access") || raw.includes("unsupported"))) ||
     (raw.includes("json_schema") && raw.includes("unsupported")) ||
-    (raw.includes("text.format") && raw.includes("unsupported"))
+    (raw.includes("text.format") && raw.includes("unsupported")) ||
+    raw.includes("formato inesperado") ||
+    raw.includes("resposta vazia") ||
+    raw.includes("json valido") ||
+    raw.includes("json válido")
   );
 }
 
@@ -1567,7 +1638,7 @@ function collectResponseStrings(value, key = "") {
   if (!value) return [];
   if (typeof value === "string") {
     const usefulKeys = new Set(["text", "output_text", "content", "arguments"]);
-    if (usefulKeys.has(key) || value.trim().startsWith("{")) return [value];
+    if (usefulKeys.has(key) || key === "refusal" || value.trim().startsWith("{")) return [value];
     return [];
   }
   if (Array.isArray(value)) return value.flatMap((entry) => collectResponseStrings(entry, key));
@@ -1598,7 +1669,7 @@ function friendlyOpenAIError(message) {
   if (lower.includes("incorrect api key") || lower.includes("invalid_api_key") || lower.includes("unauthorized")) {
     return "A chave OpenAI parece inválida. Confirma a OPENAI_API_KEY no Render, sem espaços antes/depois.";
   }
-  if (isOpenAIModelError(raw)) {
+  if (isRetryableOpenAIExtractionError(raw) && raw.toLowerCase().includes("model")) {
     return "O modelo de IA configurado não está disponível para a tua conta. Remove OPENAI_VISION_MODEL ou usa gpt-5.5.";
   }
   if (lower.includes("quota") || lower.includes("billing") || lower.includes("insufficient_quota")) {
