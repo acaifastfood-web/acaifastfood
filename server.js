@@ -1456,6 +1456,9 @@ async function extractInvoiceDraftWithOpenAIModel(fileName, buffer, contentType,
     body: JSON.stringify({
       model,
       max_output_tokens: 700,
+      text: {
+        format: invoiceExtractionTextFormat(),
+      },
       input: [
         {
           role: "user",
@@ -1463,7 +1466,7 @@ async function extractInvoiceDraftWithOpenAIModel(fileName, buffer, contentType,
             {
               type: "input_text",
               text:
-                "Lê esta foto de fatura/recibo de fornecedor em Portugal. Responde apenas com JSON valido, sem markdown, com estas chaves: supplier, invoiceNumber, issueDate, dueDate, amount, vat, status, category, notes. Datas em YYYY-MM-DD. Valores numericos em euros com ponto decimal. Se nao tiver certeza, usa string vazia ou 0. status deve ser Pendente, Pago ou Atrasado.",
+                "Extrai os dados visiveis desta foto de fatura/recibo de fornecedor em Portugal. Usa strings vazias e 0 quando um campo nao estiver claro. Datas devem ficar em YYYY-MM-DD.",
             },
             {
               type: "input_image",
@@ -1496,6 +1499,30 @@ async function extractInvoiceDraftWithOpenAIModel(fileName, buffer, contentType,
   };
 }
 
+function invoiceExtractionTextFormat() {
+  return {
+    type: "json_schema",
+    name: "invoice_extraction",
+    strict: true,
+    schema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        supplier: { type: "string", description: "Nome do fornecedor/emissor da fatura." },
+        invoiceNumber: { type: "string", description: "Numero ou referencia da fatura." },
+        issueDate: { type: "string", description: "Data da fatura no formato YYYY-MM-DD, ou vazio." },
+        dueDate: { type: "string", description: "Data de vencimento no formato YYYY-MM-DD, ou vazio." },
+        amount: { type: "number", description: "Valor total a pagar em euros." },
+        vat: { type: "number", description: "Valor de IVA em euros, se estiver visivel." },
+        status: { type: "string", enum: ["Pendente", "Pago", "Atrasado"] },
+        category: { type: "string", description: "Categoria simples da despesa, ou Geral." },
+        notes: { type: "string", description: "Observacoes curtas sobre dados incertos ou relevantes." },
+      },
+      required: ["supplier", "invoiceNumber", "issueDate", "dueDate", "amount", "vat", "status", "category", "notes"],
+    },
+  };
+}
+
 function uniqueValues(values) {
   return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
 }
@@ -1503,8 +1530,10 @@ function uniqueValues(values) {
 function isOpenAIModelError(message) {
   const raw = String(message || "").toLowerCase();
   return (
-    raw.includes("model") &&
-    (raw.includes("does not exist") || raw.includes("not found") || raw.includes("not have access") || raw.includes("unsupported"))
+    (raw.includes("model") &&
+      (raw.includes("does not exist") || raw.includes("not found") || raw.includes("not have access") || raw.includes("unsupported"))) ||
+    (raw.includes("json_schema") && raw.includes("unsupported")) ||
+    (raw.includes("text.format") && raw.includes("unsupported"))
   );
 }
 
