@@ -1466,7 +1466,7 @@ async function extractInvoiceDraftWithOpenAIModel(fileName, buffer, contentType,
             {
               type: "input_text",
               text:
-                "Extrai os dados visiveis desta foto de fatura/recibo de fornecedor em Portugal. Usa strings vazias e 0 quando um campo nao estiver claro. Datas devem ficar em YYYY-MM-DD.",
+                "Extrai os dados visiveis desta foto de fatura/recibo de fornecedor em Portugal. supplier deve ser o emissor/fornecedor, nunca o cliente. invoiceNumber deve ser apenas o numero da fatura/documento, nunca NIF, telefone, IBAN ou referencia de pagamento. issueDate e a data de emissao/data da fatura. dueDate e apenas a data marcada como vencimento/pagamento ate; se nao existir, usa string vazia. amount e o total final a pagar em euros, nao subtotal nem base tributavel. vat e apenas o valor do IVA em euros. category deve ser uma categoria curta da despesa. notes deve apontar duvidas curtas. Usa strings vazias e 0 quando um campo nao estiver claro. Datas devem ficar em YYYY-MM-DD.",
             },
             {
               type: "input_image",

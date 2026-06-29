@@ -669,19 +669,20 @@ function renderInvoiceFileInfo(file) {
 }
 
 function applyInvoiceDraft(draft) {
-  setFieldIfEmpty(elements.invoiceSupplier, draft.supplier);
-  setFieldIfEmpty(elements.invoiceNumber, draft.invoiceNumber);
-  setFieldIfEmpty(elements.invoiceIssueDate, draft.issueDate);
-  setFieldIfEmpty(elements.invoiceDueDate, draft.dueDate);
-  setFieldIfEmpty(elements.invoiceAmount, valueForInput(draft.amount));
-  setFieldIfEmpty(elements.invoiceVat, valueForInput(draft.vat));
-  setFieldIfEmpty(elements.invoiceCategory, draft.category || "Geral");
-  if (draft.status) elements.invoiceStatus.value = draft.status;
+  setDraftField(elements.invoiceSupplier, draft.supplier);
+  setDraftField(elements.invoiceNumber, draft.invoiceNumber);
+  setDraftField(elements.invoiceIssueDate, draft.issueDate);
+  setDraftField(elements.invoiceDueDate, draft.dueDate);
+  setDraftField(elements.invoiceAmount, numberValue(draft.amount) ? valueForInput(draft.amount) : "");
+  setDraftField(elements.invoiceVat, numberValue(draft.vat) ? valueForInput(draft.vat) : "");
+  setDraftField(elements.invoiceCategory, draft.category || "Geral");
+  setDraftField(elements.invoiceNotes, draft.notes);
+  elements.invoiceStatus.value = draft.status || "Pendente";
 }
 
-function setFieldIfEmpty(field, value) {
-  if (!field || field.value || value === undefined || value === null || value === "") return;
-  field.value = value;
+function setDraftField(field, value) {
+  if (!field) return;
+  field.value = value === undefined || value === null ? "" : value;
 }
 
 async function saveInvoiceRecord(event) {
