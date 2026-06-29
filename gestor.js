@@ -142,6 +142,7 @@ elements.invoiceFile.addEventListener("change", uploadInvoiceFile);
 elements.resetInvoiceFormButton.addEventListener("click", resetInvoiceForm);
 elements.refreshInvoicesButton.addEventListener("click", fetchInvoiceRecords);
 elements.invoiceList.addEventListener("click", handleInvoiceAction);
+elements.invoiceList.addEventListener("change", handleInvoiceStatusChange);
 elements.userForm.addEventListener("submit", saveUser);
 elements.resetUserFormButton.addEventListener("click", resetUserForm);
 elements.refreshUsersButton.addEventListener("click", fetchUsers);
@@ -740,33 +741,91 @@ function renderInvoiceRecords() {
     return;
   }
 
-  for (const record of invoiceRecords.slice(0, 80)) {
-    const entry = document.createElement("article");
-    entry.className = `invoice-record ${invoiceStatusClass(record.status)}`;
-    entry.innerHTML = `
-      <div>
-        <strong>${escapeHtml(record.supplier || record.title || "Fatura")}</strong>
-        <span>${escapeHtml(record.invoiceNumber || "Sem numero")} | ${escapeHtml(record.category || "Geral")}</span>
+  for (const group of groupInvoicesByMonth(invoiceRecords.slice(0, 120))) {
+    const section = document.createElement("section");
+    section.className = "invoice-month-group";
+    section.innerHTML = `
+      <div class="invoice-month-heading">
+        <div>
+          <h3>${escapeHtml(group.label)}</h3>
+          <span>${group.records.length} faturas | ${formatCurrency(group.total)}</span>
+        </div>
       </div>
-      <div>
-        <strong>${formatCurrency(record.amount || 0)}</strong>
-        <span>Valor</span>
-      </div>
-      <div>
-        <strong>${formatDate(record.dueDate)}</strong>
-        <span>Vencimento</span>
-      </div>
-      <div>
-        <strong>${escapeHtml(record.status || "Pendente")}</strong>
-        <span>${record.fileUrl ? `<a href="${escapeHtml(record.fileUrl)}" target="_blank" rel="noopener">Arquivo</a>` : "Sem arquivo"}</span>
-      </div>
-      <div class="row-actions">
-        <button class="icon-button" data-action="edit-invoice" data-id="${escapeHtml(record.id)}" type="button">Editar</button>
-        <button class="icon-button danger" data-action="delete-invoice" data-id="${escapeHtml(record.id)}" type="button">Apagar</button>
-      </div>
+      <div class="invoice-month-list"></div>
     `;
-    elements.invoiceList.appendChild(entry);
+    const monthList = section.querySelector(".invoice-month-list");
+    for (const record of group.records) {
+      monthList.appendChild(renderInvoiceRecord(record));
+    }
+    elements.invoiceList.appendChild(section);
   }
+}
+
+function renderInvoiceRecord(record) {
+  const entry = document.createElement("article");
+  entry.className = `invoice-record ${invoiceStatusClass(record.status)}`;
+  entry.innerHTML = `
+    <div>
+      <strong>${escapeHtml(record.supplier || record.title || "Fatura")}</strong>
+      <span>${escapeHtml(record.invoiceNumber || "Sem numero")} | ${escapeHtml(record.category || "Geral")}</span>
+    </div>
+    <div>
+      <strong>${formatCurrency(record.amount || 0)}</strong>
+      <span>Valor</span>
+    </div>
+    <div>
+      <strong>${formatDate(record.dueDate)}</strong>
+      <span>Vencimento</span>
+    </div>
+    <div>
+      <label class="invoice-status-field ${invoiceStatusClass(record.status)}">
+        <span>Estado</span>
+        <select data-invoice-status="${escapeHtml(record.id)}">
+          ${invoiceStatusOptions(record.status)}
+        </select>
+      </label>
+      <span>${record.fileUrl ? `<a href="${escapeHtml(record.fileUrl)}" target="_blank" rel="noopener">Arquivo</a>` : "Sem arquivo"}</span>
+    </div>
+    <div class="row-actions">
+      <button class="icon-button" data-action="edit-invoice" data-id="${escapeHtml(record.id)}" type="button">Editar</button>
+      <button class="icon-button danger" data-action="delete-invoice" data-id="${escapeHtml(record.id)}" type="button">Apagar</button>
+    </div>
+  `;
+  return entry;
+}
+
+function groupInvoicesByMonth(records) {
+  const groups = new Map();
+  for (const record of records) {
+    const key = invoiceMonthKey(record);
+    if (!groups.has(key)) {
+      groups.set(key, { key, label: invoiceMonthLabel(record), records: [], total: 0 });
+    }
+    const group = groups.get(key);
+    group.records.push(record);
+    group.total += numberValue(record.amount);
+  }
+  return [...groups.values()].sort((a, b) => a.key.localeCompare(b.key));
+}
+
+function invoiceMonthKey(record) {
+  const dateText = record.dueDate || record.issueDate || record.createdAt || "";
+  if (!dateText) return "9999-99";
+  return String(dateText).slice(0, 7);
+}
+
+function invoiceMonthLabel(record) {
+  const dateText = record.dueDate || record.issueDate || record.createdAt || "";
+  if (!dateText) return "Sem mês definido";
+  const date = new Date(`${String(dateText).slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "Sem mês definido";
+  return new Intl.DateTimeFormat("pt-PT", { month: "long", year: "numeric" }).format(date);
+}
+
+function invoiceStatusOptions(currentStatus) {
+  return ["Pendente", "Pago", "Por pagar"]
+    .map((status) => `<option value="${status}" ${normalizeInvoiceStatusName(currentStatus) === status ? "selected" : ""}>${status}</option>`)
+    .join("");
 }
 
 function handleInvoiceAction(event) {
@@ -774,6 +833,41 @@ function handleInvoiceAction(event) {
   if (!button) return;
   if (button.dataset.action === "edit-invoice") fillInvoiceForm(button.dataset.id);
   if (button.dataset.action === "delete-invoice") deleteInvoiceRecord(button.dataset.id);
+}
+
+async function handleInvoiceStatusChange(event) {
+  const select = event.target.closest("select[data-invoice-status]");
+  if (!select) return;
+  const id = select.dataset.invoiceStatus;
+  const status = normalizeInvoiceStatusName(select.value);
+  const record = invoiceRecords.find((entry) => entry.id === id);
+  if (!record) return;
+
+  const previousStatus = record.status;
+  record.status = status;
+  renderInvoiceRecords();
+  elements.invoiceFeedback.textContent = "A atualizar estado da fatura...";
+
+  try {
+    const response = await fetch("/api/invoices/status", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, status }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao atualizar estado.");
+    invoiceRecords = result.records || [];
+    renderInvoiceRecords();
+    if (result.notion?.synced) {
+      elements.invoiceFeedback.textContent = "Estado atualizado e sincronizado com o Notion.";
+    } else {
+      elements.invoiceFeedback.textContent = `Estado atualizado. Notion: ${result.notion?.message || result.notion?.error || "não sincronizado."}`;
+    }
+  } catch (error) {
+    record.status = previousStatus;
+    renderInvoiceRecords();
+    elements.invoiceFeedback.textContent = error.message || "Erro ao atualizar estado.";
+  }
 }
 
 function fillInvoiceForm(id) {
@@ -786,7 +880,7 @@ function fillInvoiceForm(id) {
   elements.invoiceDueDate.value = record.dueDate || "";
   elements.invoiceAmount.value = valueForInput(record.amount);
   elements.invoiceVat.value = valueForInput(record.vat);
-  elements.invoiceStatus.value = record.status || "Pendente";
+  elements.invoiceStatus.value = normalizeInvoiceStatusName(record.status);
   elements.invoiceCategory.value = record.category || "Geral";
   elements.invoiceNotes.value = record.notes || "";
   setInvoiceFile({
@@ -828,8 +922,14 @@ async function deleteInvoiceRecord(id) {
 
 function invoiceStatusClass(status) {
   if (status === "Pago") return "paid";
-  if (status === "Atrasado") return "overdue";
+  if (normalizeInvoiceStatusName(status) === "Por pagar") return "unpaid";
   return "pending";
+}
+
+function normalizeInvoiceStatusName(status) {
+  if (status === "Pago") return "Pago";
+  if (status === "Por pagar" || status === "Atrasado") return "Por pagar";
+  return "Pendente";
 }
 
 function valueForInput(value) {

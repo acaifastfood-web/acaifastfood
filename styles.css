@@ -716,7 +716,40 @@ td span {
 
 .invoice-list {
   display: grid;
-  gap: 10px;
+  gap: 14px;
+}
+
+.invoice-month-group {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.invoice-month-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  background: #eef3ec;
+  padding: 13px 14px;
+}
+
+.invoice-month-heading h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+  text-transform: capitalize;
+}
+
+.invoice-month-heading span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.invoice-month-list {
+  display: grid;
 }
 
 .invoice-record {
@@ -726,16 +759,20 @@ td span {
   align-items: center;
   border: 1px solid var(--line);
   border-left-width: 5px;
-  border-radius: 8px;
+  border-radius: 0;
   background: #fbfcfa;
   padding: 12px;
+}
+
+.invoice-record + .invoice-record {
+  border-top: 0;
 }
 
 .invoice-record.pending {
   border-left-color: #d98c28;
 }
 
-.invoice-record.overdue {
+.invoice-record.unpaid {
   border-left-color: var(--danger);
 }
 
@@ -751,6 +788,41 @@ td span {
 .invoice-record span {
   color: var(--muted);
   font-size: 0.84rem;
+}
+
+.invoice-status-field {
+  display: grid;
+  gap: 5px;
+}
+
+.invoice-status-field span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.invoice-status-field select {
+  min-height: 36px;
+  border-width: 2px;
+  font-weight: 900;
+}
+
+.invoice-status-field.pending select {
+  border-color: #d98c28;
+  background: #fff7e8;
+  color: #8a540c;
+}
+
+.invoice-status-field.paid select {
+  border-color: var(--ok);
+  background: #edf8f1;
+  color: var(--ok);
+}
+
+.invoice-status-field.unpaid select {
+  border-color: var(--danger);
+  background: #ffeceb;
+  color: var(--danger);
 }
 
 .check-field {
@@ -1264,6 +1336,7 @@ dialog::backdrop {
   }
 
   .supplier-heading,
+  .invoice-month-heading,
   .purchase-heading,
   .count-record-head,
   .purchase-summary {

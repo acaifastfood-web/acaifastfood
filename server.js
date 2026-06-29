@@ -235,6 +235,10 @@ http
         return await handleSaveInvoiceRecord(request, response);
       }
 
+      if (requestPath === "/api/invoices/status" && request.method === "POST") {
+        return await handleUpdateInvoiceStatus(request, response);
+      }
+
       if (requestPath === "/api/invoices/delete" && request.method === "POST") {
         return await handleDeleteInvoiceRecord(request, response);
       }
@@ -399,6 +403,22 @@ async function handleSaveInvoiceRecord(request, response) {
   } else {
     records.unshift(record);
   }
+  writeInvoiceRecords(records);
+
+  const notion = await syncInvoiceRecordToNotion(record);
+  return sendJson(response, 200, { record, records: readInvoiceRecords().slice(0, 180), notion });
+}
+
+async function handleUpdateInvoiceStatus(request, response) {
+  const body = await readJson(request);
+  const id = String(body.id || "");
+  const status = normalizeInvoiceStatus(body.status);
+  const records = readInvoiceRecords();
+  const record = records.find((entry) => entry.id === id);
+  if (!record) return sendJson(response, 404, { error: "Fatura nao encontrada." });
+
+  record.status = status;
+  record.updatedAt = new Date().toISOString();
   writeInvoiceRecords(records);
 
   const notion = await syncInvoiceRecordToNotion(record);
@@ -700,8 +720,9 @@ function normalizeInvoiceRecord(rawRecord) {
 function normalizeInvoiceStatus(status, dueDate) {
   const raw = String(status || "").trim();
   if (raw === "Pago") return "Pago";
-  if (dueDate && daysUntil(dueDate) < 0) return "Atrasado";
-  if (["Pendente", "Atrasado"].includes(raw)) return raw;
+  if (raw === "Por pagar" || raw === "Atrasado") return "Por pagar";
+  if (raw === "Pendente") return "Pendente";
+  if (dueDate && daysUntil(dueDate) < 0) return "Por pagar";
   return "Pendente";
 }
 
@@ -1524,7 +1545,7 @@ async function extractInvoiceDraftWithOpenAIChat(fileName, buffer, contentType, 
         {
           role: "system",
           content:
-            "Responde apenas com JSON valido. Chaves obrigatorias: supplier, invoiceNumber, issueDate, dueDate, amount, vat, status, category, notes.",
+            "Responde apenas com JSON valido. Chaves obrigatorias: supplier, invoiceNumber, issueDate, dueDate, amount, vat, status, category, notes. status deve ser Pendente, Pago ou Por pagar.",
         },
         {
           role: "user",
@@ -1576,7 +1597,7 @@ function normalizeOpenAIInvoiceDraft(parsed) {
 }
 
 function invoiceExtractionPrompt() {
-  return "Extrai os dados visiveis desta foto de fatura/recibo de fornecedor em Portugal. supplier deve ser o emissor/fornecedor, nunca o cliente. invoiceNumber deve ser apenas o numero da fatura/documento, nunca NIF, telefone, IBAN ou referencia de pagamento. issueDate e a data de emissao/data da fatura. dueDate e apenas a data marcada como vencimento/pagamento ate; se nao existir, usa string vazia. amount e o total final a pagar em euros, nao subtotal nem base tributavel. vat e apenas o valor do IVA em euros. category deve ser uma categoria curta da despesa. notes deve apontar duvidas curtas. Usa strings vazias e 0 quando um campo nao estiver claro. Datas devem ficar em YYYY-MM-DD.";
+  return "Extrai os dados visiveis desta foto de fatura/recibo de fornecedor em Portugal. supplier deve ser o emissor/fornecedor, nunca o cliente. invoiceNumber deve ser apenas o numero da fatura/documento, nunca NIF, telefone, IBAN ou referencia de pagamento. issueDate e a data de emissao/data da fatura. dueDate e apenas a data marcada como vencimento/pagamento ate; se nao existir, usa string vazia. amount e o total final a pagar em euros, nao subtotal nem base tributavel. vat e apenas o valor do IVA em euros. status deve ser Pendente, Pago ou Por pagar. category deve ser uma categoria curta da despesa. notes deve apontar duvidas curtas. Usa strings vazias e 0 quando um campo nao estiver claro. Datas devem ficar em YYYY-MM-DD.";
 }
 
 function invoiceExtractionTextFormat() {
@@ -1594,7 +1615,7 @@ function invoiceExtractionTextFormat() {
         dueDate: { type: "string", description: "Data de vencimento no formato YYYY-MM-DD, ou vazio." },
         amount: { type: "number", description: "Valor total a pagar em euros." },
         vat: { type: "number", description: "Valor de IVA em euros, se estiver visivel." },
-        status: { type: "string", enum: ["Pendente", "Pago", "Atrasado"] },
+        status: { type: "string", enum: ["Pendente", "Pago", "Por pagar"] },
         category: { type: "string", description: "Categoria simples da despesa, ou Geral." },
         notes: { type: "string", description: "Observacoes curtas sobre dados incertos ou relevantes." },
       },
@@ -2093,7 +2114,7 @@ function writeInvoiceRecords(records) {
 }
 
 function invoiceStatusPriority(status) {
-  if (status === "Atrasado") return 0;
+  if (status === "Por pagar" || status === "Atrasado") return 0;
   if (status === "Pendente") return 1;
   return 2;
 }
