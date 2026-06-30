@@ -134,6 +134,7 @@ const elements = {
   activityList: document.querySelector("#activityList"),
   sidebarButtons: document.querySelectorAll("[data-view-target]"),
   managerViews: document.querySelectorAll("[data-view]"),
+  moduleActions: document.querySelectorAll("[data-module-action]"),
 };
 
 elements.sidebarButtons.forEach((button) => {
@@ -204,6 +205,13 @@ function setManagerView(viewName) {
   });
   elements.sidebarButtons.forEach((button) => {
     button.classList.toggle("active", button.dataset.viewTarget === viewName);
+  });
+  updateModuleActions(viewName);
+}
+
+function updateModuleActions(viewName) {
+  elements.moduleActions.forEach((action) => {
+    action.hidden = action.dataset.moduleAction !== viewName;
   });
 }
 
@@ -341,6 +349,7 @@ function renderManagerDashboard() {
   const lowStock = items.filter(isLowStock).sort((a, b) => criticalRatio(a) - criticalRatio(b));
   const todayMovements = movements.filter((movement) => String(movement.createdAt || "").slice(0, 10) === selectedDate);
   const productionsToday = todayMovements.filter((movement) => normalizeText(`${movement.itemName || ""} ${movement.reason || ""}`).includes("produc")).length;
+  const pendingActivities = activities.filter((activity) => activity.status === "Pendente").length;
 
   elements.managerStatCards.innerHTML = "";
   [
@@ -348,6 +357,7 @@ function renderManagerDashboard() {
     { iconName: "alert", value: lowStock.length, label: "Itens críticos", description: "Abaixo do mínimo", tone: "red", action: "critical" },
     { iconName: "production", value: productionsToday, label: "Produções hoje", description: "Registos do dia", tone: "orange", action: "producao" },
     { iconName: "movement", value: todayMovements.length, label: "Movimentações hoje", description: "Entradas e saídas", tone: "blue", action: "movimentos" },
+    { iconName: "orders", value: pendingActivities, label: "Atividades pendentes", description: "Ideias e pendências", tone: "green", action: "atividades" },
   ].forEach((card) => elements.managerStatCards.appendChild(AcaiUI.StatCard(card)));
 
   elements.managerCriticalList.innerHTML = "";
@@ -365,6 +375,7 @@ function renderManagerDashboard() {
     { iconName: "production", label: "Nova Produção", tone: "orange", action: "producao" },
     { iconName: "movement", label: "Ajuste de Estoque", tone: "green", action: "ajuste" },
     { iconName: "search", label: "Consultar Estoque", tone: "blue", action: "consulta" },
+    { iconName: "orders", label: "Lista de Atividades", tone: "green", action: "atividades" },
   ].forEach((button) => elements.managerQuickActions.appendChild(AcaiUI.QuickActionButton(button)));
 
   const revenue = revenueRecords.find((record) => record.date === selectedDate);
@@ -394,6 +405,7 @@ function handleManagerDashboardAction(event) {
     return;
   }
   if (action === "relatorio") return setManagerView("faturacao");
+  if (action === "atividades") return setManagerView("atividades");
   if (action === "producao" || action === "movimentos") return setManagerView("movimentos");
   if (action === "pedidos") return setManagerView("pedidos");
   if (action === "consulta") {
@@ -1501,6 +1513,7 @@ function saveActivity(event) {
 
   persistActivities();
   renderActivities();
+  renderManagerDashboard();
   resetActivityForm();
   setSyncStatus("Atividade guardada.", "success");
 }
@@ -1589,6 +1602,7 @@ function handleActivityStatusChange(event) {
   activity.updatedAt = new Date().toISOString();
   persistActivities();
   renderActivities();
+  renderManagerDashboard();
 }
 
 function handleActivityAction(event) {
@@ -1621,6 +1635,7 @@ function deleteActivity(activity) {
   activities = activities.filter((entry) => entry.id !== activity.id);
   persistActivities();
   renderActivities();
+  renderManagerDashboard();
 }
 
 function clearResolvedActivities() {
@@ -1630,6 +1645,7 @@ function clearResolvedActivities() {
   activities = activities.filter((activity) => activity.status !== "Resolvido");
   persistActivities();
   renderActivities();
+  renderManagerDashboard();
 }
 
 function resetActivityForm() {
@@ -1904,6 +1920,7 @@ function importData(event) {
       persistActivities();
       render();
       renderActivities();
+      renderManagerDashboard();
     } catch {
       alert("Nao foi possivel importar este ficheiro.");
     } finally {

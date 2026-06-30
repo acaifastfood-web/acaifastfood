@@ -31,11 +31,11 @@
           </svg>
         </button>
         <a class="button ghost link-button" href="funcionario.html">Funcionario</a>
-        <button class="button ghost" id="templateButton" type="button">Modelo CSV</button>
-        <button class="button ghost" id="pullButton" type="button">Puxar Notion</button>
-        <button class="button ghost" id="syncButton" type="button">Sincronizar Notion</button>
-        <button class="button ghost" id="exportButton" type="button">Exportar</button>
-        <label class="button ghost file-button" for="importFile">Importar</label>
+        <button class="button ghost" id="templateButton" data-module-action="inventario" type="button">Modelo CSV</button>
+        <button class="button ghost" id="pullButton" data-module-action="inventario" type="button">Puxar Notion</button>
+        <button class="button ghost" id="syncButton" data-module-action="inventario" type="button">Sincronizar Notion</button>
+        <button class="button ghost" id="exportButton" data-module-action="inventario" type="button">Exportar</button>
+        <label class="button ghost file-button" data-module-action="inventario" for="importFile">Importar</label>
         <input id="importFile" type="file" accept=".json,.csv,application/json,text/csv" />
       </div>
     </header>
