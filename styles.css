@@ -1395,6 +1395,144 @@ td span {
   font-size: 0.82rem;
 }
 
+.activity-panel {
+  margin-top: 18px;
+}
+
+.activity-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 170px 170px;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.activity-form label:has(textarea),
+.activity-form .row-actions {
+  grid-column: 1 / -1;
+}
+
+.activity-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.activity-summary article {
+  display: grid;
+  min-height: 78px;
+  align-content: center;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #faf6f2;
+  padding: 12px;
+}
+
+.activity-summary strong {
+  color: var(--brand);
+  font-size: 1.55rem;
+}
+
+.activity-summary span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 850;
+}
+
+.activity-list {
+  display: grid;
+  gap: 12px;
+}
+
+.activity-group {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.activity-group-heading {
+  border-bottom: 1px solid var(--line);
+  background: #f4edf6;
+  padding: 13px 14px;
+}
+
+.activity-group-heading h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.activity-group-heading span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.activity-group-list {
+  display: grid;
+}
+
+.activity-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 170px auto;
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  border-left: 5px solid var(--warn);
+  background: #fffdfa;
+  padding: 12px;
+}
+
+.activity-row:last-child {
+  border-bottom: 0;
+}
+
+.activity-row.resolved {
+  border-left-color: var(--ok);
+  background: #f7fbf8;
+}
+
+.activity-main {
+  min-width: 0;
+}
+
+.activity-main strong,
+.activity-main span {
+  display: block;
+}
+
+.activity-main span {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.activity-status-select {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.activity-status-select select {
+  min-height: 38px;
+  border-width: 2px;
+  font-weight: 900;
+}
+
+.activity-row.pending .activity-status-select select {
+  border-color: #d98c28;
+  background: #fff7e8;
+  color: #8a540c;
+}
+
+.activity-row.resolved .activity-status-select select {
+  border-color: var(--ok);
+  background: #edf8f1;
+  color: var(--ok);
+}
+
 .purchase-panel {
   margin-bottom: 18px;
 }
@@ -1823,6 +1961,9 @@ dialog::backdrop {
   .invoice-grid,
   .invoice-record,
   .invoice-upload-row,
+  .activity-form,
+  .activity-summary,
+  .activity-row,
   .revenue-grid,
   .expense-grid,
   .revenue-totals,
@@ -1864,8 +2005,14 @@ dialog::backdrop {
 
   .movement,
   .user-row,
+  .activity-row,
   .count-record-items,
   .count-record {
     grid-template-columns: 1fr;
+  }
+
+  .activity-form label:has(textarea),
+  .activity-form .row-actions {
+    grid-column: auto;
   }
 }

@@ -1,6 +1,7 @@
 const STORAGE_KEY = "acai-fast-food-stock-v1";
 const MOVEMENTS_KEY = "acai-fast-food-movements-v1";
 const PURCHASE_SELECTION_KEY = "acai-fast-food-purchase-selection-v1";
+const ACTIVITIES_KEY = "acai-fast-food-activities-v1";
 const EXPIRING_DAYS = 7;
 const WHATSAPP_RECIPIENTS = [
   { label: "WhatsApp 1", phone: "351913163878" },
@@ -13,6 +14,7 @@ let selectedPurchaseIds = new Set(load(PURCHASE_SELECTION_KEY, []));
 let countRecords = [];
 let revenueRecords = [];
 let invoiceRecords = [];
+let activities = load(ACTIVITIES_KEY, []).map(normalizeActivity);
 
 const elements = {
   form: document.querySelector("#itemForm"),
@@ -120,6 +122,16 @@ const elements = {
   clearMovementsButton: document.querySelector("#clearMovementsButton"),
   refreshCountRecordsButton: document.querySelector("#refreshCountRecordsButton"),
   countRecordList: document.querySelector("#countRecordList"),
+  activityForm: document.querySelector("#activityForm"),
+  activityId: document.querySelector("#activityId"),
+  activityTitle: document.querySelector("#activityTitle"),
+  activityType: document.querySelector("#activityType"),
+  activityStatus: document.querySelector("#activityStatus"),
+  activityNotes: document.querySelector("#activityNotes"),
+  resetActivityFormButton: document.querySelector("#resetActivityFormButton"),
+  clearResolvedActivitiesButton: document.querySelector("#clearResolvedActivitiesButton"),
+  activitySummary: document.querySelector("#activitySummary"),
+  activityList: document.querySelector("#activityList"),
   sidebarButtons: document.querySelectorAll("[data-view-target]"),
   managerViews: document.querySelectorAll("[data-view]"),
 };
@@ -168,8 +180,14 @@ elements.clearMovementsButton.addEventListener("click", clearMovements);
 elements.refreshCountRecordsButton.addEventListener("click", fetchCountRecords);
 elements.countRecordList.addEventListener("change", handleCountRecordChange);
 elements.countRecordList.addEventListener("click", handleCountRecordClick);
+elements.activityForm.addEventListener("submit", saveActivity);
+elements.resetActivityFormButton.addEventListener("click", resetActivityForm);
+elements.clearResolvedActivitiesButton.addEventListener("click", clearResolvedActivities);
+elements.activityList.addEventListener("change", handleActivityStatusChange);
+elements.activityList.addEventListener("click", handleActivityAction);
 
 render();
+renderActivities();
 checkNotionStatus();
 fetchCountRecords();
 fetchRevenueRecords();
@@ -1459,6 +1477,197 @@ function buildCountRecordNoteText(record) {
   return lines.join("\n");
 }
 
+function saveActivity(event) {
+  event.preventDefault();
+  const now = new Date().toISOString();
+  const id = elements.activityId.value || crypto.randomUUID();
+  const activity = normalizeActivity({
+    id,
+    title: elements.activityTitle.value,
+    type: elements.activityType.value,
+    status: elements.activityStatus.value,
+    notes: elements.activityNotes.value,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  const index = activities.findIndex((entry) => entry.id === id);
+  if (index >= 0) {
+    activity.createdAt = activities[index].createdAt || activity.createdAt;
+    activities[index] = activity;
+  } else {
+    activities.unshift(activity);
+  }
+
+  persistActivities();
+  renderActivities();
+  resetActivityForm();
+  setSyncStatus("Atividade guardada.", "success");
+}
+
+function renderActivities() {
+  const pending = activities.filter((activity) => activity.status === "Pendente").length;
+  const resolved = activities.filter((activity) => activity.status === "Resolvido").length;
+  const ideas = activities.filter((activity) => activity.type === "ideia").length;
+  const pendencies = activities.filter((activity) => activity.type === "pendencia").length;
+
+  elements.activitySummary.innerHTML = `
+    <article><strong>${pending}</strong><span>Pendentes</span></article>
+    <article><strong>${resolved}</strong><span>Resolvidos</span></article>
+    <article><strong>${ideas}</strong><span>Ideias</span></article>
+    <article><strong>${pendencies}</strong><span>Pendências</span></article>
+  `;
+
+  elements.activityList.innerHTML = "";
+  if (activities.length === 0) {
+    elements.activityList.innerHTML = '<div class="empty-state"><h3>Sem atividades</h3><p>Regista ideias e pendências para acompanhar a operação.</p></div>';
+    return;
+  }
+
+  const groups = [
+    { type: "ideia", title: "Ideias", empty: "Sem ideias registadas." },
+    { type: "pendencia", title: "Pendências", empty: "Sem pendências registadas." },
+  ];
+
+  for (const group of groups) {
+    const groupActivities = activities
+      .filter((activity) => activity.type === group.type)
+      .sort((a, b) => activityStatusPriority(a.status) - activityStatusPriority(b.status) || b.updatedAt.localeCompare(a.updatedAt));
+    const section = document.createElement("section");
+    section.className = "activity-group";
+    section.innerHTML = `
+      <div class="activity-group-heading">
+        <div>
+          <h3>${group.title}</h3>
+          <span>${groupActivities.length} atividades</span>
+        </div>
+      </div>
+    `;
+    const list = document.createElement("div");
+    list.className = "activity-group-list";
+
+    if (groupActivities.length === 0) {
+      list.innerHTML = `<div class="mini-empty">${group.empty}</div>`;
+    } else {
+      for (const activity of groupActivities) list.appendChild(renderActivityRow(activity));
+    }
+
+    section.appendChild(list);
+    elements.activityList.appendChild(section);
+  }
+}
+
+function renderActivityRow(activity) {
+  const row = document.createElement("article");
+  row.className = `activity-row ${activity.status === "Resolvido" ? "resolved" : "pending"}`;
+  row.innerHTML = `
+    <div class="activity-main">
+      <strong>${escapeHtml(activity.title)}</strong>
+      <span>${activity.notes ? escapeHtml(activity.notes) : "Sem observações"} | ${formatDateTime(activity.updatedAt)}</span>
+    </div>
+    <label class="activity-status-select">
+      Estado
+      <select data-activity-status="${escapeHtml(activity.id)}">
+        <option value="Pendente" ${activity.status === "Pendente" ? "selected" : ""}>Pendente</option>
+        <option value="Resolvido" ${activity.status === "Resolvido" ? "selected" : ""}>Resolvido</option>
+      </select>
+    </label>
+    <div class="row-actions">
+      <button class="icon-button" data-action="edit-activity" data-id="${escapeHtml(activity.id)}" type="button">Editar</button>
+      <button class="icon-button danger" data-action="delete-activity" data-id="${escapeHtml(activity.id)}" type="button">Apagar</button>
+    </div>
+  `;
+  return row;
+}
+
+function handleActivityStatusChange(event) {
+  const select = event.target.closest("[data-activity-status]");
+  if (!select) return;
+  const activity = activities.find((entry) => entry.id === select.dataset.activityStatus);
+  if (!activity) return;
+  activity.status = normalizeActivityStatus(select.value);
+  activity.updatedAt = new Date().toISOString();
+  persistActivities();
+  renderActivities();
+}
+
+function handleActivityAction(event) {
+  const button = event.target.closest("button[data-action]");
+  if (!button) return;
+  const activity = activities.find((entry) => entry.id === button.dataset.id);
+  if (!activity) return;
+
+  if (button.dataset.action === "edit-activity") {
+    fillActivityForm(activity);
+    return;
+  }
+
+  if (button.dataset.action === "delete-activity") {
+    deleteActivity(activity);
+  }
+}
+
+function fillActivityForm(activity) {
+  elements.activityId.value = activity.id;
+  elements.activityTitle.value = activity.title;
+  elements.activityType.value = activity.type;
+  elements.activityStatus.value = activity.status;
+  elements.activityNotes.value = activity.notes || "";
+  elements.activityTitle.focus();
+}
+
+function deleteActivity(activity) {
+  if (!confirm(`Apagar "${activity.title}" da lista de atividades?`)) return;
+  activities = activities.filter((entry) => entry.id !== activity.id);
+  persistActivities();
+  renderActivities();
+}
+
+function clearResolvedActivities() {
+  const resolvedCount = activities.filter((activity) => activity.status === "Resolvido").length;
+  if (resolvedCount === 0) return;
+  if (!confirm(`Apagar ${resolvedCount} atividades resolvidas?`)) return;
+  activities = activities.filter((activity) => activity.status !== "Resolvido");
+  persistActivities();
+  renderActivities();
+}
+
+function resetActivityForm() {
+  elements.activityForm.reset();
+  elements.activityId.value = "";
+  elements.activityType.value = "ideia";
+  elements.activityStatus.value = "Pendente";
+}
+
+function persistActivities() {
+  localStorage.setItem(ACTIVITIES_KEY, JSON.stringify(activities));
+}
+
+function normalizeActivity(activity) {
+  const now = new Date().toISOString();
+  return {
+    id: activity.id || crypto.randomUUID(),
+    title: String(activity.title || "").trim() || "Atividade sem título",
+    type: normalizeActivityType(activity.type),
+    status: normalizeActivityStatus(activity.status),
+    notes: String(activity.notes || "").trim(),
+    createdAt: activity.createdAt || now,
+    updatedAt: activity.updatedAt || activity.createdAt || now,
+  };
+}
+
+function normalizeActivityType(type) {
+  return normalizeText(type).startsWith("pend") ? "pendencia" : "ideia";
+}
+
+function normalizeActivityStatus(status) {
+  return normalizeText(status).startsWith("resol") ? "Resolvido" : "Pendente";
+}
+
+function activityStatusPriority(status) {
+  return status === "Resolvido" ? 1 : 0;
+}
+
 function getPurchaseSuggestions() {
   return items
     .filter(shouldSuggestPurchase)
@@ -1690,8 +1899,11 @@ function importData(event) {
       const imported = file.name.toLowerCase().endsWith(".csv") ? importCsvItems(content) : importJsonItems(content);
       items = mergeItems(imported.items);
       movements = imported.movements || movements;
+      activities = imported.activities || activities;
       persist();
+      persistActivities();
       render();
+      renderActivities();
     } catch {
       alert("Nao foi possivel importar este ficheiro.");
     } finally {
@@ -1702,7 +1914,7 @@ function importData(event) {
 }
 
 function exportData() {
-  const payload = JSON.stringify({ items, movements, exportedAt: new Date().toISOString() }, null, 2);
+  const payload = JSON.stringify({ items, movements, activities, exportedAt: new Date().toISOString() }, null, 2);
   downloadBlob(new Blob([payload], { type: "application/json" }), `estoque-acai-${new Date().toISOString().slice(0, 10)}.json`);
 }
 
@@ -1716,7 +1928,11 @@ function downloadCsvTemplate() {
 function importJsonItems(content) {
   const data = JSON.parse(content);
   if (!Array.isArray(data.items)) throw new Error("Formato invalido");
-  return { items: data.items.map(normalizeItem), movements: Array.isArray(data.movements) ? data.movements : [] };
+  return {
+    items: data.items.map(normalizeItem),
+    movements: Array.isArray(data.movements) ? data.movements : [],
+    activities: Array.isArray(data.activities) ? data.activities.map(normalizeActivity) : undefined,
+  };
 }
 
 function importCsvItems(content) {
