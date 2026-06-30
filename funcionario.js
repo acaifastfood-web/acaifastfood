@@ -12,8 +12,18 @@ let movements = load(MOVEMENTS_KEY, []);
 let auth = loadAuth();
 
 const elements = {
+  appGreeting: document.querySelector("#appGreeting"),
   loginPanel: document.querySelector("#loginPanel"),
   staffPanel: document.querySelector("#staffPanel"),
+  staffDashboard: document.querySelector("#staffDashboard"),
+  staffStatCards: document.querySelector("#staffStatCards"),
+  staffCriticalList: document.querySelector("#staffCriticalList"),
+  staffQuickActions: document.querySelector("#staffQuickActions"),
+  staffDailySummary: document.querySelector("#staffDailySummary"),
+  staffBottomNav: document.querySelector("#staffBottomNav"),
+  staffViewAllCriticalButton: document.querySelector("#staffViewAllCriticalButton"),
+  staffReportButton: document.querySelector("#staffReportButton"),
+  staffCountSection: document.querySelector("#staffCountSection"),
   loginForm: document.querySelector("#loginForm"),
   loginUsername: document.querySelector("#loginUsername"),
   loginPassword: document.querySelector("#loginPassword"),
@@ -43,6 +53,11 @@ elements.staffSearchInput.addEventListener("input", renderCountList);
 elements.clearStaffSearchButton.addEventListener("click", clearStaffSearch);
 elements.saveCountsButton.addEventListener("click", saveDailyCounts);
 elements.countList.addEventListener("change", normalizeCountField);
+elements.staffStatCards.addEventListener("click", handleStaffDashboardAction);
+elements.staffQuickActions.addEventListener("click", handleStaffDashboardAction);
+elements.staffViewAllCriticalButton.addEventListener("click", () => handleStaffAction("critical"));
+elements.staffReportButton.addEventListener("click", () => handleStaffAction("report"));
+elements.staffBottomNav.addEventListener("click", handleStaffNavigation);
 
 renderControlTypeOptions();
 renderCountList();
@@ -115,14 +130,20 @@ async function logout() {
 function showLogin(message) {
   elements.loginPanel.hidden = false;
   elements.staffPanel.hidden = true;
+  elements.staffBottomNav.hidden = true;
+  elements.appGreeting.textContent = "Olá";
   elements.loginStatus.textContent = message || "";
 }
 
 function showApp() {
   elements.loginPanel.hidden = true;
   elements.staffPanel.hidden = false;
-  elements.currentUserName.textContent = auth?.user?.name || auth?.user?.username || "";
+  const name = auth?.user?.name || auth?.user?.username || "";
+  elements.currentUserName.textContent = name;
+  elements.appGreeting.textContent = `Olá, ${name || "equipa"}`;
+  elements.staffBottomNav.hidden = false;
   elements.loginStatus.textContent = "";
+  renderStaffDashboard();
 }
 
 async function checkNotionStatus() {
@@ -153,6 +174,7 @@ async function pullFromNotion(options = {}) {
     persist();
     renderControlTypeOptions();
     renderCountList();
+    renderStaffDashboard();
     const database = result.databaseTitle ? ` de "${result.databaseTitle}"` : "";
     setSyncStatus(`Base carregada${database}: ${items.length} produtos.`, "success");
   } catch (error) {
@@ -170,6 +192,7 @@ function renderCountList() {
 
   if (filteredItems.length === 0) {
     elements.countList.innerHTML = '<div class="empty-state"><h3>Sem produtos</h3><p>Atualiza a base, muda o filtro ou limpa a pesquisa.</p></div>';
+    renderStaffDashboard();
     return;
   }
 
@@ -220,6 +243,144 @@ function renderCountList() {
     fragment.appendChild(section);
   }
   elements.countList.appendChild(fragment);
+  renderStaffDashboard();
+}
+
+function renderStaffDashboard() {
+  if (!elements.staffPanel || elements.staffPanel.hidden) return;
+
+  const lowStock = items.filter(isLowStock);
+  const todayMovements = getTodayMovements();
+  const productionsToday = getTodayProductions(todayMovements);
+  const countedToday = todayMovements.filter((movement) => movement.type === "count").length;
+
+  elements.staffStatCards.innerHTML = "";
+  [
+    { iconName: "stock", value: items.length, label: "Itens em estoque", description: "Base atual", tone: "purple", action: "stock" },
+    { iconName: "alert", value: lowStock.length, label: "Itens críticos", description: "Abaixo do mínimo", tone: "red", action: "critical" },
+    { iconName: "production", value: productionsToday, label: "Produções hoje", description: "Registos do dia", tone: "orange", action: "production" },
+    { iconName: "movement", value: todayMovements.length, label: "Movimentações hoje", description: "Contagens e ajustes", tone: "blue", action: "movements" },
+  ].forEach((card) => elements.staffStatCards.appendChild(AcaiUI.StatCard(card)));
+
+  elements.staffCriticalList.innerHTML = "";
+  elements.staffCriticalList.appendChild(
+    AcaiUI.CriticalStockList({
+      items: lowStock.sort((a, b) => criticalRatio(a) - criticalRatio(b)),
+      limit: 4,
+      emptyText: "Estoque sem alertas críticos.",
+    }),
+  );
+
+  elements.staffQuickActions.innerHTML = "";
+  [
+    { iconName: "check", label: "Lançar Estoque", tone: "purple", action: "stock" },
+    { iconName: "production", label: "Nova Produção", tone: "orange", action: "production" },
+    { iconName: "movement", label: "Ajuste de Estoque", tone: "green", action: "adjust" },
+    { iconName: "search", label: "Consultar Estoque", tone: "blue", action: "search" },
+  ].forEach((button) => elements.staffQuickActions.appendChild(AcaiUI.QuickActionButton(button)));
+
+  elements.staffDailySummary.innerHTML = "";
+  elements.staffDailySummary.appendChild(
+    AcaiUI.DailySummaryCard({
+      sales: "Sem dados",
+      orders: String(countedToday),
+      ticket: "Sem dados",
+      topProducts: topMovementProducts(todayMovements) || "Sem dados",
+    }),
+  );
+}
+
+function handleStaffDashboardAction(event) {
+  const target = event.target.closest("[data-action]");
+  if (!target) return;
+  handleStaffAction(target.dataset.action);
+}
+
+function handleStaffNavigation(event) {
+  const button = event.target.closest("[data-staff-nav]");
+  if (!button) return;
+  setStaffNav(button.dataset.staffNav);
+}
+
+function setStaffNav(target) {
+  elements.staffBottomNav.querySelectorAll("[data-staff-nav]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.staffNav === target);
+  });
+
+  if (target === "dashboard") {
+    elements.staffDashboard.scrollIntoView({ behavior: "smooth", block: "start" });
+  } else if (target === "estoque") {
+    handleStaffAction("stock");
+  } else if (target === "producao") {
+    handleStaffAction("production");
+  } else if (target === "pedidos") {
+    handleStaffAction("critical");
+  } else {
+    elements.pullButton.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
+function handleStaffAction(action) {
+  if (action === "critical") {
+    elements.staffSearchInput.value = "";
+    elements.controlTypeFilter.value = "all";
+    renderCountList();
+    elements.staffCountSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  if (action === "production") {
+    const productionOption = [...elements.controlTypeFilter.options].find((option) => normalizeControlType(option.value).includes("produc"));
+    elements.controlTypeFilter.value = productionOption?.value || "all";
+    elements.staffSearchInput.value = productionOption ? "" : "produção";
+    renderCountList();
+    elements.staffCountSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  if (action === "search") {
+    elements.staffCountSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    elements.staffSearchInput.focus();
+    return;
+  }
+
+  if (action === "report" || action === "movements") {
+    elements.staffDashboard.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  elements.staffCountSection.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function getTodayMovements() {
+  const selectedDate = elements.countDate.value || todayText;
+  return movements.filter((movement) => String(movement.createdAt || "").slice(0, 10) === selectedDate);
+}
+
+function getTodayProductions(todayMovements) {
+  return todayMovements.filter((movement) => {
+    const text = `${movement.itemName || ""} ${movement.reason || ""}`;
+    return normalizeControlType(text).includes("produc");
+  }).length;
+}
+
+function topMovementProducts(todayMovements) {
+  const counts = new Map();
+  for (const movement of todayMovements) {
+    const name = movement.itemName || "";
+    if (!name) continue;
+    counts.set(name, (counts.get(name) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 2)
+    .map(([name]) => name)
+    .join(", ");
+}
+
+function criticalRatio(item) {
+  const minimum = Math.max(item.minimum || 0, item.dailyMinimum || 0, 1);
+  return item.quantity / minimum;
 }
 
 function renderMinimumCells(item) {

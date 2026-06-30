@@ -10,16 +10,26 @@
     <link rel="apple-touch-icon" href="icon-funcionario-512.png" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
-    <header class="app-header">
+  <body class="app-mobile-shell">
+    <header class="app-header app-header-modern">
       <div class="brand-lockup">
-        <img class="app-logo" src="funcionario-estoque.jpg" alt="Acai Fast Food Estoque" />
+        <img class="app-logo" src="logo-acai.png" alt="Acai Fast Food" />
         <div>
-          <p class="eyebrow">Acai Fast Food</p>
-          <h1>Controle de Estoque</h1>
+          <p class="eyebrow">Controle de Estoque</p>
+          <h1 id="appGreeting">Olá</h1>
         </div>
       </div>
-      <div class="header-actions">
+      <div class="header-actions app-header-tools">
+        <label class="app-date-picker">
+          Data
+          <input id="countDate" type="date" />
+        </label>
+        <button class="notification-button" type="button" aria-label="Notificações">
+          <svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path>
+            <path d="M10 21h4"></path>
+          </svg>
+        </button>
         <button class="button ghost" id="pullButton" type="button">Atualizar base</button>
       </div>
     </header>
@@ -50,7 +60,43 @@
       </section>
 
       <section class="panel staff-panel" id="staffPanel" hidden>
-        <div class="panel-heading">
+        <div class="staff-dashboard" id="staffDashboard">
+          <div class="stat-grid" id="staffStatCards"></div>
+
+          <section class="dashboard-card">
+            <div class="section-heading">
+              <div>
+                <h2>Estoque crítico</h2>
+                <p class="panel-subtitle">Itens abaixo do mínimo.</p>
+              </div>
+              <button class="text-action" id="staffViewAllCriticalButton" type="button">Ver todos</button>
+            </div>
+            <div id="staffCriticalList"></div>
+          </section>
+
+          <section class="dashboard-card">
+            <div class="section-heading">
+              <div>
+                <h2>Ações rápidas</h2>
+                <p class="panel-subtitle">Fluxos usados no dia a dia.</p>
+              </div>
+            </div>
+            <div class="quick-actions-grid" id="staffQuickActions"></div>
+          </section>
+
+          <section class="dashboard-card">
+            <div class="section-heading">
+              <div>
+                <h2>Resumo do dia</h2>
+                <p class="panel-subtitle">Operação e alertas principais.</p>
+              </div>
+              <button class="text-action" id="staffReportButton" type="button">Ver relatório</button>
+            </div>
+            <div id="staffDailySummary"></div>
+          </section>
+        </div>
+
+        <div class="panel-heading count-panel-heading" id="staffCountSection">
           <div>
             <h2>Contagem diaria</h2>
             <p class="panel-subtitle">Responsavel: <strong id="currentUserName"></strong></p>
@@ -61,10 +107,6 @@
           </div>
         </div>
         <div class="staff-toolbar">
-          <label>
-            Data
-            <input id="countDate" type="date" />
-          </label>
           <label>
             Tipo de controle
             <select id="controlTypeFilter">
@@ -80,8 +122,32 @@
         <p class="list-count" id="staffCountInfo">0 produtos visiveis</p>
         <div class="count-list" id="countList"></div>
       </section>
+
+      <nav class="bottom-navigation" id="staffBottomNav" aria-label="Navegação principal" hidden>
+        <button class="bottom-nav-item active" data-staff-nav="dashboard" type="button">
+          <svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 13h7V4H4v9Z"></path><path d="M13 20h7V4h-7v16Z"></path><path d="M4 20h7v-5H4v5Z"></path></svg>
+          <span>Dashboard</span>
+        </button>
+        <button class="bottom-nav-item" data-staff-nav="estoque" type="button">
+          <svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m21 8-9-5-9 5 9 5 9-5Z"></path><path d="M3 8v8l9 5 9-5V8"></path><path d="M12 13v8"></path></svg>
+          <span>Estoque</span>
+        </button>
+        <button class="bottom-nav-item" data-staff-nav="producao" type="button">
+          <svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 17h16"></path><path d="M6 17V9a6 6 0 0 1 12 0v8"></path><path d="M9 9h6"></path><path d="M9 13h6"></path></svg>
+          <span>Produção</span>
+        </button>
+        <button class="bottom-nav-item" data-staff-nav="pedidos" type="button">
+          <svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M6 3h12v18H6z"></path><path d="M9 7h6"></path><path d="M9 11h6"></path><path d="M9 15h4"></path></svg>
+          <span>Pedidos</span>
+        </button>
+        <button class="bottom-nav-item" data-staff-nav="mais" type="button">
+          <svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 12h.01"></path><path d="M19 12h.01"></path><path d="M5 12h.01"></path></svg>
+          <span>Mais</span>
+        </button>
+      </nav>
     </main>
 
+    <script src="app-ui.js"></script>
     <script src="funcionario.js"></script>
   </body>
 </html>

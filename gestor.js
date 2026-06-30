@@ -27,10 +27,12 @@ const elements = {
   categoryFilter: document.querySelector("#categoryFilter"),
   clearFiltersButton: document.querySelector("#clearFiltersButton"),
   managerCountInfo: document.querySelector("#managerCountInfo"),
-  totalItems: document.querySelector("#totalItems"),
-  lowStockItems: document.querySelector("#lowStockItems"),
-  expiringItems: document.querySelector("#expiringItems"),
-  stockValue: document.querySelector("#stockValue"),
+  managerDate: document.querySelector("#managerDate"),
+  managerStatCards: document.querySelector("#managerStatCards"),
+  managerCriticalList: document.querySelector("#managerCriticalList"),
+  managerQuickActions: document.querySelector("#managerQuickActions"),
+  managerDailySummary: document.querySelector("#managerDailySummary"),
+  managerDashboard: document.querySelector("[data-view='resumo']"),
   revenueForm: document.querySelector("#revenueForm"),
   revenueId: document.querySelector("#revenueId"),
   revenueDate: document.querySelector("#revenueDate"),
@@ -125,6 +127,9 @@ const elements = {
 elements.sidebarButtons.forEach((button) => {
   button.addEventListener("click", () => setManagerView(button.dataset.viewTarget));
 });
+elements.managerDate.value = todayDateText();
+elements.managerDate.addEventListener("change", renderManagerDashboard);
+elements.managerDashboard.addEventListener("click", handleManagerDashboardAction);
 elements.form.addEventListener("submit", saveItem);
 elements.resetFormButton.addEventListener("click", resetForm);
 elements.searchInput.addEventListener("input", render);
@@ -308,14 +313,97 @@ function render() {
 }
 
 function renderSummary() {
-  const lowStock = items.filter(isLowStock).length;
-  const expiring = items.filter(isExpiringSoon).length;
-  const value = items.reduce((total, item) => total + item.quantity * item.unitCost, 0);
+  renderManagerDashboard();
+}
 
-  elements.totalItems.textContent = String(items.length);
-  elements.lowStockItems.textContent = String(lowStock);
-  elements.expiringItems.textContent = String(expiring);
-  elements.stockValue.textContent = formatCurrency(value);
+function renderManagerDashboard() {
+  if (!elements.managerStatCards) return;
+
+  const selectedDate = elements.managerDate.value || todayDateText();
+  const lowStock = items.filter(isLowStock).sort((a, b) => criticalRatio(a) - criticalRatio(b));
+  const todayMovements = movements.filter((movement) => String(movement.createdAt || "").slice(0, 10) === selectedDate);
+  const productionsToday = todayMovements.filter((movement) => normalizeText(`${movement.itemName || ""} ${movement.reason || ""}`).includes("produc")).length;
+
+  elements.managerStatCards.innerHTML = "";
+  [
+    { iconName: "stock", value: items.length, label: "Itens em estoque", description: "Produtos ativos", tone: "purple", action: "estoque" },
+    { iconName: "alert", value: lowStock.length, label: "Itens críticos", description: "Abaixo do mínimo", tone: "red", action: "critical" },
+    { iconName: "production", value: productionsToday, label: "Produções hoje", description: "Registos do dia", tone: "orange", action: "producao" },
+    { iconName: "movement", value: todayMovements.length, label: "Movimentações hoje", description: "Entradas e saídas", tone: "blue", action: "movimentos" },
+  ].forEach((card) => elements.managerStatCards.appendChild(AcaiUI.StatCard(card)));
+
+  elements.managerCriticalList.innerHTML = "";
+  elements.managerCriticalList.appendChild(
+    AcaiUI.CriticalStockList({
+      items: lowStock,
+      limit: 5,
+      emptyText: "Estoque sem alertas críticos.",
+    }),
+  );
+
+  elements.managerQuickActions.innerHTML = "";
+  [
+    { iconName: "check", label: "Lançar Estoque", tone: "purple", action: "estoque" },
+    { iconName: "production", label: "Nova Produção", tone: "orange", action: "producao" },
+    { iconName: "movement", label: "Ajuste de Estoque", tone: "green", action: "ajuste" },
+    { iconName: "search", label: "Consultar Estoque", tone: "blue", action: "consulta" },
+  ].forEach((button) => elements.managerQuickActions.appendChild(AcaiUI.QuickActionButton(button)));
+
+  const revenue = revenueRecords.find((record) => record.date === selectedDate);
+  const gross = numberValue(revenue?.grossTotal);
+  const orders = numberValue(revenue?.orders);
+  const ticket = orders > 0 ? gross / orders : 0;
+  elements.managerDailySummary.innerHTML = "";
+  elements.managerDailySummary.appendChild(
+    AcaiUI.DailySummaryCard({
+      sales: revenue ? formatCurrency(gross) : "Sem dados",
+      orders: revenue ? formatNumber(orders) : "0",
+      ticket: revenue && orders > 0 ? formatCurrency(ticket) : "Sem dados",
+      topProducts: topMovedProducts(todayMovements) || "Sem dados",
+    }),
+  );
+}
+
+function handleManagerDashboardAction(event) {
+  const target = event.target.closest("[data-dashboard-action], [data-action]");
+  if (!target) return;
+  const action = target.dataset.dashboardAction || target.dataset.action;
+  if (action === "critical") {
+    elements.statusFilter.value = "low";
+    setManagerView("inventario");
+    render();
+    elements.searchInput.focus();
+    return;
+  }
+  if (action === "relatorio") return setManagerView("faturacao");
+  if (action === "producao" || action === "movimentos") return setManagerView("movimentos");
+  if (action === "pedidos") return setManagerView("pedidos");
+  if (action === "consulta") {
+    setManagerView("inventario");
+    elements.searchInput.focus();
+    return;
+  }
+  setManagerView("inventario");
+}
+
+function topMovedProducts(todayMovements) {
+  const outgoing = todayMovements.filter((movement) => movement.type === "out");
+  const counts = new Map();
+  for (const movement of outgoing) {
+    const name = movement.itemName || "";
+    if (!name) continue;
+    counts.set(name, (counts.get(name) || 0) + numberValue(movement.quantity));
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, 2)
+    .map(([name]) => name)
+    .join(", ");
+}
+
+function criticalRatio(item) {
+  const minimum = Math.max(numberValue(item.minimum), numberValue(item.dailyMinimum), 1);
+  return numberValue(item.quantity) / minimum;
 }
 
 async function fetchRevenueRecords() {
@@ -326,10 +414,12 @@ async function fetchRevenueRecords() {
     if (!response.ok) throw new Error(result.error || "Falha ao carregar faturação.");
     revenueRecords = result.records || [];
     renderRevenueRecords();
+    renderManagerDashboard();
     elements.revenueFeedback.textContent = `${revenueRecords.length} registos de faturação.`;
   } catch (error) {
     revenueRecords = [];
     renderRevenueRecords();
+    renderManagerDashboard();
     elements.revenueFeedback.textContent = error.message || "Erro ao carregar faturação.";
   }
 }
@@ -350,6 +440,7 @@ async function saveRevenueRecord(event) {
     if (!response.ok) throw new Error(result.error || "Falha ao guardar faturação.");
     revenueRecords = result.records || [];
     renderRevenueRecords();
+    renderManagerDashboard();
     resetRevenueForm();
     renderRevenueWhatsappShare(result.record, result.notion);
     if (result.notion?.synced) {
@@ -588,6 +679,7 @@ async function deleteRevenueRecord(id) {
     if (!response.ok) throw new Error(result.error || "Falha ao apagar faturação.");
     revenueRecords = result.records || [];
     renderRevenueRecords();
+    renderManagerDashboard();
     hideRevenueWhatsappShare();
     elements.revenueFeedback.textContent = "Registo de faturação apagado.";
   } catch (error) {
@@ -1846,6 +1938,14 @@ function detectCsvSeparator(content) {
 
 function normalizeHeader(value) {
   return String(value).trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, "_");
+}
+
+function normalizeText(value) {
+  return String(value || "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }
 
 function downloadBlob(blob, filename) {

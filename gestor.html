@@ -10,16 +10,26 @@
     <link rel="apple-touch-icon" href="icon-gestor-512.png" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
-    <header class="app-header">
+  <body class="app-mobile-shell">
+    <header class="app-header app-header-modern">
       <div class="brand-lockup">
-        <img class="app-logo" src="gestor-app.jpg" alt="Acai Fast Food Gestor" />
+        <img class="app-logo" src="logo-acai.png" alt="Acai Fast Food" />
         <div>
           <p class="eyebrow">Acai Fast Food</p>
-          <h1>App do Gestor</h1>
+          <h1>Gestão da Operação</h1>
         </div>
       </div>
-      <div class="header-actions">
+      <div class="header-actions app-header-tools">
+        <label class="app-date-picker">
+          Data
+          <input id="managerDate" type="date" />
+        </label>
+        <button class="notification-button" type="button" aria-label="Notificações">
+          <svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path>
+            <path d="M10 21h4"></path>
+          </svg>
+        </button>
         <a class="button ghost link-button" href="funcionario.html">Funcionario</a>
         <button class="button ghost" id="templateButton" type="button">Modelo CSV</button>
         <button class="button ghost" id="pullButton" type="button">Puxar Notion</button>
@@ -48,30 +58,50 @@
         </aside>
 
         <div class="manager-content">
-          <section class="manager-view" data-view="resumo">
-            <div class="view-heading">
+          <section class="manager-view dashboard-view" data-view="resumo">
+            <div class="dashboard-hero">
               <div>
-                <h2>Resumo</h2>
-                <p class="panel-subtitle">Visao geral do estoque e alertas principais.</p>
+                <p class="eyebrow">Dashboard</p>
+                <h2>Operação em tempo real</h2>
+                <p class="panel-subtitle">Estoque, produção, movimentos e faturação do dia.</p>
               </div>
+              <button class="button primary" data-dashboard-action="estoque" type="button">Lançar Estoque</button>
             </div>
-            <div class="summary-grid" aria-label="Resumo do estoque">
-              <article class="metric">
-                <span class="metric-label">Itens ativos</span>
-                <strong id="totalItems">0</strong>
-              </article>
-              <article class="metric warning">
-                <span class="metric-label">Abaixo do minimo</span>
-                <strong id="lowStockItems">0</strong>
-              </article>
-              <article class="metric danger">
-                <span class="metric-label">Vencem em 7 dias</span>
-                <strong id="expiringItems">0</strong>
-              </article>
-              <article class="metric">
-                <span class="metric-label">Valor estimado</span>
-                <strong id="stockValue">0,00 EUR</strong>
-              </article>
+
+            <div class="stat-grid" id="managerStatCards"></div>
+
+            <div class="dashboard-grid">
+              <section class="dashboard-card dashboard-card-wide">
+                <div class="section-heading">
+                  <div>
+                    <h2>Estoque crítico</h2>
+                    <p class="panel-subtitle">Produtos abaixo do mínimo.</p>
+                  </div>
+                  <button class="text-action" data-dashboard-action="critical" type="button">Ver todos</button>
+                </div>
+                <div id="managerCriticalList"></div>
+              </section>
+
+              <section class="dashboard-card">
+                <div class="section-heading">
+                  <div>
+                    <h2>Ações rápidas</h2>
+                    <p class="panel-subtitle">Atalhos da operação.</p>
+                  </div>
+                </div>
+                <div class="quick-actions-grid" id="managerQuickActions"></div>
+              </section>
+
+              <section class="dashboard-card dashboard-card-wide">
+                <div class="section-heading">
+                  <div>
+                    <h2>Resumo do dia</h2>
+                    <p class="panel-subtitle">Faturação, pedidos e ticket médio.</p>
+                  </div>
+                  <button class="text-action" data-dashboard-action="relatorio" type="button">Ver relatório</button>
+                </div>
+                <div id="managerDailySummary"></div>
+              </section>
             </div>
           </section>
 
@@ -507,6 +537,29 @@
       </section>
         </div>
       </div>
+
+      <nav class="bottom-navigation manager-bottom-nav" aria-label="Navegação principal">
+        <button class="bottom-nav-item active" data-view-target="resumo" type="button">
+          <svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 13h7V4H4v9Z"></path><path d="M13 20h7V4h-7v16Z"></path><path d="M4 20h7v-5H4v5Z"></path></svg>
+          <span>Dashboard</span>
+        </button>
+        <button class="bottom-nav-item" data-view-target="inventario" type="button">
+          <svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="m21 8-9-5-9 5 9 5 9-5Z"></path><path d="M3 8v8l9 5 9-5V8"></path><path d="M12 13v8"></path></svg>
+          <span>Estoque</span>
+        </button>
+        <button class="bottom-nav-item" data-view-target="movimentos" type="button">
+          <svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M4 17h16"></path><path d="M6 17V9a6 6 0 0 1 12 0v8"></path><path d="M9 9h6"></path><path d="M9 13h6"></path></svg>
+          <span>Produção</span>
+        </button>
+        <button class="bottom-nav-item" data-view-target="pedidos" type="button">
+          <svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M6 3h12v18H6z"></path><path d="M9 7h6"></path><path d="M9 11h6"></path><path d="M9 15h4"></path></svg>
+          <span>Pedidos</span>
+        </button>
+        <button class="bottom-nav-item" data-view-target="faturas" type="button">
+          <svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M12 12h.01"></path><path d="M19 12h.01"></path><path d="M5 12h.01"></path></svg>
+          <span>Mais</span>
+        </button>
+      </nav>
     </main>
 
     <dialog id="movementDialog">
@@ -558,6 +611,7 @@
       </tr>
     </template>
 
+    <script src="app-ui.js"></script>
     <script src="gestor.js"></script>
   </body>
 </html>
