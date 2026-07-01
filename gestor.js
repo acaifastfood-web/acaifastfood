@@ -346,8 +346,10 @@ function renderManagerDashboard() {
   if (!elements.managerStatCards) return;
 
   const selectedDate = elements.managerDate.value || todayDateText();
+  const selectedMonth = selectedDate.slice(0, 7);
   const lowStock = items.filter(isLowStock).sort((a, b) => criticalRatio(a) - criticalRatio(b));
   const todayMovements = movements.filter((movement) => String(movement.createdAt || "").slice(0, 10) === selectedDate);
+  const monthMovements = movements.filter((movement) => String(movement.createdAt || "").slice(0, 7) === selectedMonth);
   const productionsToday = todayMovements.filter((movement) => normalizeText(`${movement.itemName || ""} ${movement.reason || ""}`).includes("produc")).length;
   const pendingActivities = activities.filter((activity) => activity.status === "Pendente").length;
 
@@ -379,18 +381,31 @@ function renderManagerDashboard() {
     { iconName: "orders", label: "Lista de Atividades", tone: "green", action: "atividades" },
   ].forEach((button) => elements.managerQuickActions.appendChild(AcaiUI.QuickActionButton(button)));
 
-  const revenue = revenueRecords.find((record) => record.date === selectedDate);
-  const gross = numberValue(revenue?.grossTotal);
-  const orders = numberValue(revenue?.orders);
+  const monthlyRevenue = revenueRecords.filter((record) => String(record.date || "").slice(0, 7) === selectedMonth);
+  const gross = monthlyRevenue.reduce((total, record) => total + revenueGrossTotal(record), 0);
+  const orders = monthlyRevenue.reduce((total, record) => total + numberValue(record.orders), 0);
   const ticket = orders > 0 ? gross / orders : 0;
   elements.managerDailySummary.innerHTML = "";
   elements.managerDailySummary.appendChild(
     AcaiUI.DailySummaryCard({
-      sales: revenue ? formatCurrency(gross) : "Sem dados",
-      orders: revenue ? formatNumber(orders) : "0",
-      ticket: revenue && orders > 0 ? formatCurrency(ticket) : "Sem dados",
-      topProducts: topMovedProducts(todayMovements) || "Sem dados",
+      sales: monthlyRevenue.length ? formatCurrency(gross) : "Sem dados",
+      orders: monthlyRevenue.length ? formatNumber(orders) : "0",
+      ticket: monthlyRevenue.length && orders > 0 ? formatCurrency(ticket) : "Sem dados",
+      topProducts: topMovedProducts(monthMovements) || "Sem dados",
     }),
+  );
+}
+
+function revenueGrossTotal(record) {
+  if (record && Object.prototype.hasOwnProperty.call(record, "grossTotal")) return numberValue(record.grossTotal);
+  return (
+    numberValue(record?.coins) +
+    numberValue(record?.mbway) +
+    numberValue(record?.uberEats) +
+    numberValue(record?.glovo) +
+    numberValue(record?.bolt) +
+    numberValue(record?.multibanco) +
+    numberValue(record?.cash)
   );
 }
 

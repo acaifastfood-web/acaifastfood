@@ -99,8 +99,8 @@
   function DailySummaryCard({ sales = "0,00 EUR", orders = "0", ticket = "0,00 EUR", topProducts = "Sem dados" }) {
     return nodeFromHtml(`
       <div class="daily-summary-grid">
-        <div><span>Vendas aprox.</span><strong>${escapeHtml(sales)}</strong></div>
-        <div><span>Pedidos</span><strong>${escapeHtml(orders)}</strong></div>
+        <div><span>Vendas no mês</span><strong>${escapeHtml(sales)}</strong></div>
+        <div><span>Pedidos no mês</span><strong>${escapeHtml(orders)}</strong></div>
         <div><span>Ticket médio</span><strong>${escapeHtml(ticket)}</strong></div>
         <div class="daily-summary-wide"><span>Mais vendidos</span><strong>${escapeHtml(topProducts)}</strong></div>
       </div>
