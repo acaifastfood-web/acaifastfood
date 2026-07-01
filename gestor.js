@@ -84,6 +84,7 @@ const elements = {
   managerCriticalList: document.querySelector("#managerCriticalList"),
   managerQuickActions: document.querySelector("#managerQuickActions"),
   managerDailySummary: document.querySelector("#managerDailySummary"),
+  managerUpcomingInvoices: document.querySelector("#managerUpcomingInvoices"),
   managerDashboard: document.querySelector("[data-view='resumo']"),
   revenueForm: document.querySelector("#revenueForm"),
   revenueId: document.querySelector("#revenueId"),
@@ -445,6 +446,8 @@ function renderManagerDashboard() {
       topProducts: topMovedProducts(monthMovements) || "Sem dados",
     }),
   );
+
+  renderUpcomingInvoices();
 }
 
 function revenueGrossTotal(record) {
@@ -482,6 +485,69 @@ function handleManagerDashboardAction(event) {
     return;
   }
   setManagerView("inventario");
+}
+
+function renderUpcomingInvoices() {
+  if (!elements.managerUpcomingInvoices) return;
+  const upcomingInvoices = invoiceRecords
+    .filter((record) => {
+      const dueDate = invoiceDueDate(record);
+      return normalizeInvoiceStatusName(record.status) !== "Pago" && dueDate && Number.isFinite(daysUntil(dueDate));
+    })
+    .sort((a, b) => daysUntil(invoiceDueDate(a)) - daysUntil(invoiceDueDate(b)) || String(a.supplier || "").localeCompare(String(b.supplier || "")))
+    .slice(0, 6);
+
+  elements.managerUpcomingInvoices.innerHTML = "";
+  if (upcomingInvoices.length === 0) {
+    elements.managerUpcomingInvoices.innerHTML =
+      '<div class="mini-empty">Sem faturas pendentes com vencimento definido.</div>';
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "upcoming-invoice-list";
+  for (const record of upcomingInvoices) list.appendChild(renderUpcomingInvoiceRow(record));
+  elements.managerUpcomingInvoices.appendChild(list);
+}
+
+function renderUpcomingInvoiceRow(record) {
+  const dueDate = invoiceDueDate(record);
+  const days = daysUntil(dueDate);
+  const row = document.createElement("article");
+  row.className = `upcoming-invoice-row ${invoiceDueClass(days)}`;
+  row.innerHTML = `
+    <div class="upcoming-invoice-main">
+      <strong>${escapeHtml(record.supplier || record.title || "Fatura")}</strong>
+      <span>${escapeHtml(record.invoiceNumber || "Sem número")} | ${escapeHtml(record.category || "Geral")}</span>
+    </div>
+    <div class="upcoming-invoice-amount">
+      <strong>${formatCurrency(record.amount || 0)}</strong>
+      <span>${escapeHtml(normalizeInvoiceStatusName(record.status))}</span>
+    </div>
+    <div class="upcoming-invoice-due">
+      <strong>${formatDate(dueDate)}</strong>
+      <span>${escapeHtml(invoiceDueLabel(days))}</span>
+    </div>
+  `;
+  return row;
+}
+
+function invoiceDueClass(days) {
+  if (days < 0) return "is-overdue";
+  if (days === 0) return "is-today";
+  if (days <= 3) return "is-soon";
+  return "is-upcoming";
+}
+
+function invoiceDueLabel(days) {
+  if (days < 0) return `${Math.abs(days)} dia${Math.abs(days) === 1 ? "" : "s"} em atraso`;
+  if (days === 0) return "Vence hoje";
+  if (days === 1) return "Vence amanhã";
+  return `Vence em ${days} dias`;
+}
+
+function invoiceDueDate(record) {
+  return String(record?.dueDate || "").slice(0, 10);
 }
 
 function topMovedProducts(todayMovements) {
@@ -797,10 +863,12 @@ async function fetchInvoiceRecords() {
     if (!response.ok) throw new Error(result.error || "Falha ao carregar faturas.");
     invoiceRecords = result.records || [];
     renderInvoiceRecords();
+    renderManagerDashboard();
     elements.invoiceFeedback.textContent = `${invoiceRecords.length} faturas cadastradas.`;
   } catch (error) {
     invoiceRecords = [];
     renderInvoiceRecords();
+    renderManagerDashboard();
     elements.invoiceFeedback.textContent = error.message || "Erro ao carregar faturas.";
   }
 }
@@ -813,6 +881,7 @@ async function syncInvoiceRecords() {
     if (!response.ok) throw new Error(result.error || "Falha ao sincronizar faturas.");
     invoiceRecords = result.records || [];
     renderInvoiceRecords();
+    renderManagerDashboard();
     const failed = result.failed ? ` ${result.failed} com erro.` : "";
     elements.invoiceFeedback.textContent = `${result.synced || 0} faturas sincronizadas com o Notion.${failed}`;
   } catch (error) {
@@ -908,6 +977,7 @@ async function saveInvoiceRecord(event) {
     if (!response.ok) throw new Error(result.error || "Falha ao guardar fatura.");
     invoiceRecords = result.records || [];
     renderInvoiceRecords();
+    renderManagerDashboard();
     resetInvoiceForm();
     if (result.notion?.synced) {
       elements.invoiceFeedback.textContent = "Fatura guardada e sincronizada com o Notion.";
@@ -1053,6 +1123,7 @@ async function handleInvoiceStatusChange(event) {
   const previousStatus = record.status;
   record.status = status;
   renderInvoiceRecords();
+  renderManagerDashboard();
   elements.invoiceFeedback.textContent = "A atualizar estado da fatura...";
 
   try {
@@ -1065,6 +1136,7 @@ async function handleInvoiceStatusChange(event) {
     if (!response.ok) throw new Error(result.error || "Falha ao atualizar estado.");
     invoiceRecords = result.records || [];
     renderInvoiceRecords();
+    renderManagerDashboard();
     if (result.notion?.synced) {
       elements.invoiceFeedback.textContent = "Estado atualizado e sincronizado com o Notion.";
     } else {
@@ -1073,6 +1145,7 @@ async function handleInvoiceStatusChange(event) {
   } catch (error) {
     record.status = previousStatus;
     renderInvoiceRecords();
+    renderManagerDashboard();
     elements.invoiceFeedback.textContent = error.message || "Erro ao atualizar estado.";
   }
 }
@@ -1121,6 +1194,7 @@ async function deleteInvoiceRecord(id) {
     if (!response.ok) throw new Error(result.error || "Falha ao apagar fatura.");
     invoiceRecords = result.records || [];
     renderInvoiceRecords();
+    renderManagerDashboard();
     elements.invoiceFeedback.textContent = "Registo de fatura apagado.";
   } catch (error) {
     elements.invoiceFeedback.textContent = error.message || "Erro ao apagar fatura.";
