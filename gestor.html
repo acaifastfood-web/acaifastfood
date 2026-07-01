@@ -10,7 +10,7 @@
     <link rel="apple-touch-icon" href="icon-gestor-512.png" />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body class="app-mobile-shell">
+  <body class="app-mobile-shell manager-app">
     <header class="app-header app-header-modern">
       <div class="brand-lockup">
         <img class="app-logo" src="logo-acai.png" alt="Acai Fast Food" />
@@ -41,6 +41,13 @@
 
       <div class="manager-layout">
         <aside class="manager-sidebar" aria-label="Navegacao do gestor">
+          <div class="sidebar-brand">
+            <img src="logo-acai.png" alt="Acai Fast Food" />
+            <div>
+              <strong>Acai Fast Food</strong>
+              <span>Painel gestor</span>
+            </div>
+          </div>
           <button class="sidebar-button active" data-view-target="resumo" type="button">Resumo</button>
           <button class="sidebar-button" data-view-target="faturacao" type="button">Faturação</button>
           <button class="sidebar-button" data-view-target="faturas" type="button">Faturas</button>
@@ -63,6 +70,25 @@
               </div>
               <button class="button primary" data-dashboard-action="estoque" type="button">Lançar Estoque</button>
             </div>
+
+            <section class="dashboard-toolbar">
+              <div class="dashboard-filter-field">
+                <span>Loja</span>
+                <strong>Acai Fast Food</strong>
+              </div>
+              <div class="dashboard-filter-field">
+                <span>Estado</span>
+                <strong>Operação ativa</strong>
+              </div>
+              <div class="dashboard-filter-field dashboard-filter-wide">
+                <span>Base</span>
+                <strong>Base operacional</strong>
+              </div>
+              <div class="dashboard-toolbar-actions">
+                <button class="button ghost" data-dashboard-action="faturas" type="button">Faturas</button>
+                <button class="button primary" data-dashboard-action="relatorio" type="button">Relatório</button>
+              </div>
+            </section>
 
             <section class="dashboard-card dashboard-quick-card">
               <div class="section-heading">

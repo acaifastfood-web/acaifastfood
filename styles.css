@@ -254,6 +254,314 @@ h2 {
   min-width: 0;
 }
 
+.sidebar-brand {
+  display: none;
+}
+
+.dashboard-toolbar {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(150px, 0.8fr) minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 12px;
+  box-shadow: var(--shadow-soft);
+}
+
+.dashboard-filter-field {
+  display: grid;
+  min-height: 56px;
+  align-content: center;
+  gap: 4px;
+  border: 1px solid #ece5df;
+  border-radius: 8px;
+  background: #fbfaf8;
+  padding: 10px 12px;
+}
+
+.dashboard-filter-field span {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.dashboard-filter-field strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.92rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-toolbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@media (min-width: 681px) {
+  .manager-app {
+    --bg: #f4f5f7;
+    background: var(--bg);
+  }
+
+  .manager-app .app-header {
+    position: sticky;
+    top: 0;
+    z-index: 18;
+    min-height: 72px;
+    border-bottom: 1px solid #e8eaef;
+    background: rgba(255, 255, 255, 0.96);
+    color: var(--ink);
+    padding: 10px 22px;
+    box-shadow: 0 8px 20px rgba(38, 31, 28, 0.05);
+  }
+
+  .manager-app .app-header .app-logo {
+    display: none;
+  }
+
+  .manager-app .app-header .eyebrow {
+    color: var(--brand-orange);
+    font-size: 0.7rem;
+  }
+
+  .manager-app .app-header h1 {
+    color: var(--ink);
+    font-size: 1.05rem;
+    font-weight: 950;
+  }
+
+  .manager-app .app-date-picker {
+    color: var(--muted);
+  }
+
+  .manager-app .app-date-picker input,
+  .manager-app .app-header .button.ghost,
+  .manager-app .app-header .file-button {
+    border-color: #e3e5ea;
+    background: #f8f9fb;
+    color: var(--ink);
+  }
+
+  .manager-app .app-date-picker input::-webkit-calendar-picker-indicator {
+    filter: none;
+  }
+
+  .manager-app .app-shell {
+    width: 100%;
+    max-width: none;
+    padding: 16px 18px 36px;
+  }
+
+  .manager-app .sync-banner {
+    max-width: none;
+    margin-bottom: 14px;
+    box-shadow: none;
+  }
+
+  .manager-app .manager-layout {
+    grid-template-columns: 238px minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .manager-app .manager-sidebar {
+    top: 88px;
+    min-height: calc(100vh - 112px);
+    align-content: start;
+    gap: 4px;
+    border-color: #e7e9ee;
+    background: #fbfbfd;
+    box-shadow: 0 12px 30px rgba(29, 24, 21, 0.06);
+    padding: 12px;
+  }
+
+  .manager-app .sidebar-brand {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    border-bottom: 1px solid #eaecf0;
+    margin-bottom: 8px;
+    padding: 2px 4px 14px;
+  }
+
+  .manager-app .sidebar-brand img {
+    width: 44px;
+    height: 44px;
+    border: 1px solid #ece5df;
+    border-radius: 8px;
+    background: #fff;
+    object-fit: contain;
+    padding: 5px;
+  }
+
+  .manager-app .sidebar-brand strong,
+  .manager-app .sidebar-brand span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .manager-app .sidebar-brand strong {
+    font-size: 0.9rem;
+    font-weight: 950;
+  }
+
+  .manager-app .sidebar-brand span {
+    color: var(--muted);
+    font-size: 0.76rem;
+    font-weight: 850;
+  }
+
+  .manager-app .sidebar-button {
+    position: relative;
+    min-height: 36px;
+    border-radius: 6px;
+    color: #67666b;
+    font-size: 0.82rem;
+    padding: 8px 10px 8px 28px;
+  }
+
+  .manager-app .sidebar-button::before {
+    content: "";
+    position: absolute;
+    left: 11px;
+    top: 50%;
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: #f07a22;
+    transform: translateY(-50%);
+    opacity: 0.68;
+  }
+
+  .manager-app .sidebar-button:hover,
+  .manager-app .sidebar-button.active {
+    background: #fff1e7;
+    color: #c95b13;
+  }
+
+  .manager-app .sidebar-button.active {
+    box-shadow: inset 3px 0 0 #f07a22;
+  }
+
+  .manager-app .dashboard-view {
+    gap: 14px;
+  }
+
+  .manager-app .dashboard-hero {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    padding: 0 2px 2px;
+  }
+
+  .manager-app .dashboard-hero .eyebrow {
+    color: var(--brand-orange);
+    font-size: 0.72rem;
+  }
+
+  .manager-app .dashboard-hero h2 {
+    color: #df6217;
+    font-size: 1.02rem;
+  }
+
+  .manager-app .dashboard-hero .panel-subtitle {
+    font-size: 0.82rem;
+  }
+
+  .manager-app .dashboard-toolbar,
+  .manager-app .dashboard-card,
+  .manager-app .stat-card,
+  .manager-app .panel {
+    border-color: #e7e9ee;
+    box-shadow: 0 10px 24px rgba(34, 27, 22, 0.05);
+  }
+
+  .manager-app .stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .manager-app .stat-card {
+    min-height: 116px;
+    padding: 14px;
+  }
+
+  .manager-app .stat-card-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .manager-app .stat-card-icon .ui-icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .manager-app .stat-card-value {
+    font-size: 1.75rem;
+  }
+
+  .manager-app .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .manager-app .dashboard-card {
+    min-height: 236px;
+    padding: 16px;
+  }
+
+  .manager-app .dashboard-quick-card {
+    min-height: auto;
+  }
+
+  .manager-app .dashboard-card-full {
+    grid-column: 1 / -1;
+  }
+
+  .manager-app .section-heading h2 {
+    position: relative;
+    padding-left: 24px;
+    color: #8c8b90;
+    font-size: 0.92rem;
+    font-weight: 900;
+  }
+
+  .manager-app .section-heading h2::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.35em;
+    width: 12px;
+    height: 12px;
+    border-left: 2px solid var(--brand-orange);
+    border-bottom: 2px solid var(--brand-orange);
+    background: linear-gradient(to top, var(--brand-orange) 0 55%, transparent 55%);
+  }
+
+  .manager-app .section-heading .panel-subtitle {
+    margin-top: 4px;
+    font-size: 0.78rem;
+  }
+
+  .manager-app .quick-action {
+    min-height: 82px;
+    border-color: #eceef2;
+    background: #fbfcfd;
+  }
+
+  .manager-app .quick-action span {
+    width: 34px;
+    height: 34px;
+  }
+}
+
 .view-heading {
   display: flex;
   align-items: center;
@@ -2192,6 +2500,7 @@ dialog::backdrop {
 
   .portal-grid,
   .summary-grid,
+  .dashboard-toolbar,
   .manager-sidebar,
   .count-row,
   .count-row.has-expiry-field,
@@ -2234,6 +2543,15 @@ dialog::backdrop {
   .toolbar-actions {
     justify-content: flex-start;
     width: 100%;
+  }
+
+  .dashboard-toolbar-actions {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .dashboard-toolbar-actions .button {
+    flex: 1 1 140px;
   }
 
   .order-pill {
