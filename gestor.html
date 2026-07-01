@@ -21,7 +21,7 @@
       </div>
       <div class="header-actions app-header-tools">
         <label class="app-date-picker">
-          Data
+          <span>Data</span>
           <input id="managerDate" type="date" />
         </label>
         <button class="notification-button" type="button" aria-label="Notificações">
@@ -71,6 +71,16 @@
 
             <div class="stat-grid" id="managerStatCards"></div>
 
+            <section class="dashboard-card dashboard-quick-card">
+              <div class="section-heading">
+                <div>
+                  <h2>Ações rápidas</h2>
+                  <p class="panel-subtitle">Atalhos da operação.</p>
+                </div>
+              </div>
+              <div class="quick-actions-grid" id="managerQuickActions"></div>
+            </section>
+
             <div class="dashboard-grid">
               <section class="dashboard-card dashboard-card-wide">
                 <div class="section-heading">
@@ -81,16 +91,6 @@
                   <button class="text-action" data-dashboard-action="critical" type="button">Ver todos</button>
                 </div>
                 <div id="managerCriticalList"></div>
-              </section>
-
-              <section class="dashboard-card">
-                <div class="section-heading">
-                  <div>
-                    <h2>Ações rápidas</h2>
-                    <p class="panel-subtitle">Atalhos da operação.</p>
-                  </div>
-                </div>
-                <div class="quick-actions-grid" id="managerQuickActions"></div>
               </section>
 
               <section class="dashboard-card dashboard-card-wide">

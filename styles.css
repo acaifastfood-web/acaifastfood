@@ -124,16 +124,26 @@ h2 {
 }
 
 .app-date-picker {
-  width: min(170px, 42vw);
+  flex: 0 0 148px;
+  width: 148px;
   color: #ffd8bb;
   font-size: 0.76rem;
 }
 
 .app-date-picker input {
-  min-height: 40px;
+  min-height: 38px;
   border-color: rgba(255, 255, 255, 0.22);
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
+  padding: 8px 9px;
+}
+
+.app-date-picker input::-webkit-calendar-picker-indicator {
+  width: 16px;
+  height: 16px;
+  margin-left: 2px;
+  opacity: 0.88;
+  filter: invert(1);
 }
 
 .notification-button {
@@ -569,6 +579,10 @@ h2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.dashboard-quick-card .quick-actions-grid {
+  grid-template-columns: repeat(auto-fit, minmax(142px, 1fr));
 }
 
 .quick-action {
@@ -1886,7 +1900,9 @@ dialog::backdrop {
 
   .app-header-tools {
     width: 100%;
+    align-items: center;
     justify-content: flex-start;
+    flex-wrap: nowrap;
     overflow-x: auto;
     padding-bottom: 2px;
   }
@@ -1897,7 +1913,19 @@ dialog::backdrop {
   }
 
   .app-date-picker {
-    min-width: 142px;
+    flex-basis: 124px;
+    width: 124px;
+    min-width: 124px;
+  }
+
+  .app-date-picker span {
+    display: none;
+  }
+
+  .app-date-picker input {
+    min-height: 42px;
+    padding: 8px 7px;
+    font-size: 0.78rem;
   }
 
   .bottom-navigation {
