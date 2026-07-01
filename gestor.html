@@ -24,12 +24,6 @@
           <span>Data</span>
           <input id="managerDate" type="date" />
         </label>
-        <button class="notification-button" type="button" aria-label="Notificações">
-          <svg class="ui-icon" aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path>
-            <path d="M10 21h4"></path>
-          </svg>
-        </button>
         <a class="button ghost link-button" href="funcionario.html">Funcionario</a>
         <button class="button ghost" id="templateButton" data-module-action="inventario" type="button">Modelo CSV</button>
         <button class="button ghost" id="pullButton" data-module-action="inventario" type="button">Puxar Notion</button>
@@ -69,8 +63,6 @@
               <button class="button primary" data-dashboard-action="estoque" type="button">Lançar Estoque</button>
             </div>
 
-            <div class="stat-grid" id="managerStatCards"></div>
-
             <section class="dashboard-card dashboard-quick-card">
               <div class="section-heading">
                 <div>
@@ -80,6 +72,8 @@
               </div>
               <div class="quick-actions-grid" id="managerQuickActions"></div>
             </section>
+
+            <div class="stat-grid" id="managerStatCards"></div>
 
             <div class="dashboard-grid">
               <section class="dashboard-card dashboard-card-wide">
