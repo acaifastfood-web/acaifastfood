@@ -120,12 +120,14 @@ h2 {
 }
 
 .app-header-tools {
+  column-gap: 14px;
   justify-content: flex-end;
 }
 
 .app-date-picker {
-  flex: 0 0 148px;
-  width: 148px;
+  flex: 0 0 168px;
+  width: 168px;
+  margin-right: 4px;
   color: #ffd8bb;
   font-size: 0.76rem;
 }
@@ -135,7 +137,7 @@ h2 {
   border-color: rgba(255, 255, 255, 0.22);
   background: rgba(255, 255, 255, 0.12);
   color: #fff;
-  padding: 8px 9px;
+  padding: 8px 32px 8px 9px;
 }
 
 .app-date-picker input::-webkit-calendar-picker-indicator {
@@ -1901,9 +1903,10 @@ dialog::backdrop {
   }
 
   .app-date-picker {
-    flex-basis: 124px;
-    width: 124px;
-    min-width: 124px;
+    flex-basis: 154px;
+    width: 154px;
+    min-width: 154px;
+    margin-right: 8px;
   }
 
   .app-date-picker span {
@@ -1912,7 +1915,7 @@ dialog::backdrop {
 
   .app-date-picker input {
     min-height: 42px;
-    padding: 8px 7px;
+    padding: 8px 32px 8px 9px;
     font-size: 0.78rem;
   }
 
