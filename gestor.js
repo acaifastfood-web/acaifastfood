@@ -439,6 +439,7 @@ function renderManagerDashboard() {
     { iconName: "movement", label: "Ajuste de Estoque", tone: "green", action: "ajuste" },
     { iconName: "search", label: "Consultar Estoque", tone: "blue", action: "consulta" },
     { iconName: "check", label: "Ponto", tone: "blue", action: "ponto" },
+    { iconName: "orders", label: "Funcionários e senhas", tone: "orange", action: "funcionarios" },
     { iconName: "sales", label: "Registro financeiro", tone: "purple", action: "relatorio" },
     { iconName: "orders", label: "Lista de Atividades", tone: "green", action: "atividades" },
   ].forEach((button) => elements.managerQuickActions.appendChild(AcaiUI.QuickActionButton(button)));
@@ -488,6 +489,7 @@ function handleManagerDashboardAction(event) {
   if (action === "atividades") return setManagerView("atividades");
   if (action === "faturas") return setManagerView("faturas");
   if (action === "ponto") return setManagerView("ponto");
+  if (action === "funcionarios") return setManagerView("funcionarios");
   if (action === "producao" || action === "movimentos") return setManagerView("movimentos");
   if (action === "pedidos") return setManagerView("pedidos");
   if (action === "consulta") {

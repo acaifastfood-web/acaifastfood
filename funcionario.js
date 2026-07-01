@@ -28,8 +28,10 @@ const elements = {
   timeClockStatus: document.querySelector("#timeClockStatus"),
   timeClockButtons: document.querySelectorAll("[data-time-action]"),
   loginForm: document.querySelector("#loginForm"),
+  loginUserSelect: document.querySelector("#loginUserSelect"),
   loginUsername: document.querySelector("#loginUsername"),
   loginPassword: document.querySelector("#loginPassword"),
+  showLoginPassword: document.querySelector("#showLoginPassword"),
   loginStatus: document.querySelector("#loginStatus"),
   currentUserName: document.querySelector("#currentUserName"),
   logoutButton: document.querySelector("#logoutButton"),
@@ -48,6 +50,8 @@ const elements = {
 
 elements.countDate.value = todayText;
 elements.loginForm.addEventListener("submit", login);
+elements.loginUserSelect.addEventListener("change", selectLoginUser);
+elements.showLoginPassword.addEventListener("change", toggleLoginPasswordVisibility);
 elements.logoutButton.addEventListener("click", logout);
 elements.pullButton.addEventListener("click", pullFromNotion);
 elements.countDate.addEventListener("change", renderCountList);
@@ -67,7 +71,60 @@ elements.timeClockButtons.forEach((button) => {
 
 renderControlTypeOptions();
 renderCountList();
+fetchLoginUsers();
 initializeAuth();
+
+async function fetchLoginUsers() {
+  try {
+    const response = await fetch("/api/users");
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao carregar funcionários.");
+    renderLoginUserOptions(result.users || []);
+  } catch {
+    elements.loginUserSelect.innerHTML = '<option value="">Digitar utilizador manualmente</option>';
+  }
+}
+
+function renderLoginUserOptions(users) {
+  const currentUsername = elements.loginUsername.value.trim();
+  elements.loginUserSelect.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Escolher funcionário";
+  elements.loginUserSelect.appendChild(placeholder);
+
+  const activeUsers = users.filter((user) => user.active !== false).sort((a, b) => {
+    const sectorCompare = String(a.sector || "").localeCompare(String(b.sector || ""));
+    if (sectorCompare !== 0) return sectorCompare;
+    return String(a.name || "").localeCompare(String(b.name || ""));
+  });
+
+  for (const sector of ["Gestao", "Sala", "Cozinha"]) {
+    const sectorUsers = activeUsers.filter((user) => user.sector === sector);
+    if (sectorUsers.length === 0) continue;
+    const group = document.createElement("optgroup");
+    group.label = sector;
+    for (const user of sectorUsers) {
+      const option = document.createElement("option");
+      option.value = user.username;
+      option.textContent = `${user.name} (${user.username})`;
+      group.appendChild(option);
+    }
+    elements.loginUserSelect.appendChild(group);
+  }
+
+  if (currentUsername) elements.loginUserSelect.value = currentUsername;
+}
+
+function selectLoginUser() {
+  if (!elements.loginUserSelect.value) return;
+  elements.loginUsername.value = elements.loginUserSelect.value;
+  elements.loginPassword.focus();
+}
+
+function toggleLoginPasswordVisibility() {
+  elements.loginPassword.type = elements.showLoginPassword.checked ? "text" : "password";
+}
 
 async function initializeAuth() {
   if (!auth?.token) {

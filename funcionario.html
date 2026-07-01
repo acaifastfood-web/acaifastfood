@@ -47,12 +47,22 @@
         </div>
         <form class="login-form" id="loginForm" autocomplete="off">
           <label>
+            Funcionário
+            <select id="loginUserSelect">
+              <option value="">Escolher funcionário</option>
+            </select>
+          </label>
+          <label>
             Utilizador
             <input id="loginUsername" name="username" type="text" required />
           </label>
           <label>
             Senha
             <input id="loginPassword" name="password" type="password" required />
+          </label>
+          <label class="check-field login-show-password">
+            <input id="showLoginPassword" type="checkbox" />
+            Mostrar senha
           </label>
           <button class="button primary" type="submit">Entrar</button>
           <p class="login-status" id="loginStatus"></p>
