@@ -1889,12 +1889,14 @@ dialog::backdrop {
   }
 
   .app-header-tools {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
     width: 100%;
-    align-items: center;
+    align-items: stretch;
     justify-content: flex-start;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 2px;
+    gap: 10px;
+    overflow: visible;
+    padding-bottom: 0;
   }
 
   .app-logo {
@@ -1903,10 +1905,10 @@ dialog::backdrop {
   }
 
   .app-date-picker {
-    flex-basis: 154px;
-    width: 154px;
-    min-width: 154px;
-    margin-right: 8px;
+    flex-basis: auto;
+    width: 100%;
+    min-width: 0;
+    margin-right: 0;
   }
 
   .app-date-picker span {
@@ -1915,8 +1917,14 @@ dialog::backdrop {
 
   .app-date-picker input {
     min-height: 42px;
-    padding: 8px 32px 8px 9px;
+    padding: 8px 40px 8px 12px;
     font-size: 0.78rem;
+  }
+
+  .app-header .link-button,
+  .app-header [data-module-action] {
+    width: 100%;
+    justify-content: center;
   }
 
   .bottom-navigation {
