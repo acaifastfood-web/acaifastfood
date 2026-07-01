@@ -18,6 +18,7 @@ const OPENAI_VISION_FALLBACK_MODELS = ["gpt-5.5", "gpt-4.1-mini", "gpt-4o-mini"]
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
 ensureDataDir();
 const COUNT_RECORDS_PATH = path.join(DATA_DIR, "count-records.json");
+const TIME_RECORDS_PATH = path.join(DATA_DIR, "time-records.json");
 const REVENUE_RECORDS_PATH = path.join(DATA_DIR, "faturacao-records.json");
 const INVOICE_RECORDS_PATH = path.join(DATA_DIR, "invoice-records.json");
 const INVOICE_FILES_DIR = path.join(DATA_DIR, "invoice-files");
@@ -203,6 +204,18 @@ http
         return await handleResetUserPassword(request, response);
       }
 
+      if (requestPath === "/api/time-records" && request.method === "GET") {
+        return handleTimeRecords(request, response);
+      }
+
+      if (requestPath === "/api/time-records/me" && request.method === "POST") {
+        return await handleMyTimeRecord(request, response);
+      }
+
+      if (requestPath === "/api/time-records/punch" && request.method === "POST") {
+        return await handleTimePunch(request, response);
+      }
+
       if (requestPath === "/api/count-records" && request.method === "GET") {
         return handleCountRecords(response);
       }
@@ -302,6 +315,59 @@ async function handleLogout(request, response) {
 function handleCountRecords(response) {
   const records = readCountRecords().slice(0, 120);
   return sendJson(response, 200, { records });
+}
+
+function handleTimeRecords(request, response) {
+  const url = new URL(request.url, `http://localhost:${PORT}`);
+  const date = normalizeDate(url.searchParams.get("date") || "");
+  const employee = normalizeTextKey(url.searchParams.get("employee") || "");
+  let records = readTimeRecords();
+  if (date) records = records.filter((record) => record.date === date);
+  if (employee) {
+    records = records.filter((record) => {
+      const haystack = `${record.employeeName || ""} ${record.employeeUsername || ""} ${record.employeeSector || ""}`;
+      return normalizeTextKey(haystack).includes(employee);
+    });
+  }
+  return sendJson(response, 200, { records: records.slice(0, 240) });
+}
+
+async function handleMyTimeRecord(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+  const date = normalizeDate(body.date) || todayDateText();
+  const record = findTimeRecord(readTimeRecords(), session, date);
+  return sendJson(response, 200, { record: record || buildEmptyTimeRecord(session, date) });
+}
+
+async function handleTimePunch(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente antes de registrar o ponto." });
+  const action = normalizeTimeAction(body.action);
+  if (!action) return sendJson(response, 400, { error: "Tipo de ponto invalido." });
+
+  const date = normalizeDate(body.date) || todayDateText();
+  const records = readTimeRecords();
+  let record = findTimeRecord(records, session, date);
+  if (!record) {
+    record = buildEmptyTimeRecord(session, date);
+    records.unshift(record);
+  }
+
+  const now = new Date().toISOString();
+  record[timeActionField(action)] = now;
+  record.updatedAt = now;
+  record.events.unshift({
+    id: crypto.randomUUID(),
+    action,
+    label: timeActionLabel(action),
+    createdAt: now,
+  });
+  record.events = record.events.slice(0, 40);
+  writeTimeRecords(records);
+  return sendJson(response, 200, { record, records: readTimeRecords().slice(0, 240) });
 }
 
 async function handleCountRecordItemStatus(request, response) {
@@ -769,6 +835,10 @@ function normalizeDate(value) {
   const raw = String(value || "").trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
   return "";
+}
+
+function todayDateText() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 async function syncRevenueRecordToNotion(record) {
@@ -2128,6 +2198,111 @@ function appendCountRecord(record) {
 
 function writeCountRecords(records) {
   fs.writeFileSync(COUNT_RECORDS_PATH, JSON.stringify(records, null, 2));
+}
+
+function readTimeRecords() {
+  try {
+    if (!fs.existsSync(TIME_RECORDS_PATH)) return [];
+    const records = JSON.parse(fs.readFileSync(TIME_RECORDS_PATH, "utf8"));
+    if (!Array.isArray(records)) return [];
+    let changed = false;
+    const normalizedRecords = records.map((record) => {
+      const normalized = normalizeTimeRecord(record);
+      if (!record.id || !Array.isArray(record.events)) changed = true;
+      return normalized;
+    });
+    if (changed) writeTimeRecords(normalizedRecords);
+    return normalizedRecords.sort((a, b) => b.date.localeCompare(a.date) || (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+  } catch {
+    return [];
+  }
+}
+
+function writeTimeRecords(records) {
+  fs.writeFileSync(TIME_RECORDS_PATH, JSON.stringify(records.slice(0, 1000), null, 2));
+}
+
+function normalizeTimeRecord(record) {
+  const now = new Date().toISOString();
+  return {
+    id: String(record.id || crypto.randomUUID()),
+    date: normalizeDate(record.date) || todayDateText(),
+    employeeId: String(record.employeeId || ""),
+    employeeName: String(record.employeeName || "Funcionario"),
+    employeeUsername: String(record.employeeUsername || ""),
+    employeeSector: String(record.employeeSector || ""),
+    entryAt: validIsoDate(record.entryAt),
+    lunchStartAt: validIsoDate(record.lunchStartAt),
+    lunchEndAt: validIsoDate(record.lunchEndAt),
+    exitAt: validIsoDate(record.exitAt),
+    createdAt: validIsoDate(record.createdAt) || now,
+    updatedAt: validIsoDate(record.updatedAt) || validIsoDate(record.createdAt) || now,
+    events: Array.isArray(record.events)
+      ? record.events
+          .map((event) => ({
+            id: String(event.id || crypto.randomUUID()),
+            action: normalizeTimeAction(event.action),
+            label: event.label || timeActionLabel(event.action),
+            createdAt: validIsoDate(event.createdAt) || now,
+          }))
+          .filter((event) => event.action)
+      : [],
+  };
+}
+
+function findTimeRecord(records, session, date) {
+  return records.find((record) => record.date === date && (record.employeeId === session.userId || record.employeeUsername === session.username));
+}
+
+function buildEmptyTimeRecord(session, date) {
+  const now = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    date,
+    employeeId: session.userId,
+    employeeName: session.name,
+    employeeUsername: session.username,
+    employeeSector: session.sector,
+    entryAt: "",
+    lunchStartAt: "",
+    lunchEndAt: "",
+    exitAt: "",
+    createdAt: now,
+    updatedAt: now,
+    events: [],
+  };
+}
+
+function normalizeTimeAction(action) {
+  const normalized = normalizeTextKey(action);
+  if (["entry", "entrada", "clockin"].includes(normalized)) return "entry";
+  if (["lunchstart", "almocoinicio", "pausaalmoco", "pausa"].includes(normalized)) return "lunchStart";
+  if (["lunchend", "almocofim", "retornoalmoco", "retorno"].includes(normalized)) return "lunchEnd";
+  if (["exit", "saida", "clockout"].includes(normalized)) return "exit";
+  return "";
+}
+
+function timeActionField(action) {
+  return {
+    entry: "entryAt",
+    lunchStart: "lunchStartAt",
+    lunchEnd: "lunchEndAt",
+    exit: "exitAt",
+  }[normalizeTimeAction(action)];
+}
+
+function timeActionLabel(action) {
+  return {
+    entry: "Entrada",
+    lunchStart: "Pausa para almoço",
+    lunchEnd: "Retorno do almoço",
+    exit: "Saída",
+  }[normalizeTimeAction(action)] || "Ponto";
+}
+
+function validIsoDate(value) {
+  const raw = String(value || "");
+  return Number.isNaN(new Date(raw).getTime()) ? "" : raw;
 }
 
 function readRevenueRecords() {

@@ -1407,6 +1407,137 @@ td span {
   font-size: 0.84rem;
 }
 
+.compact-date-field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.compact-date-field input {
+  min-height: 42px;
+  min-width: 158px;
+}
+
+.time-clock-card {
+  display: grid;
+  gap: 12px;
+}
+
+.time-clock-summary,
+.time-record-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.time-clock-cell,
+.time-summary-card {
+  display: grid;
+  min-height: 72px;
+  align-content: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfa;
+  padding: 12px;
+}
+
+.time-clock-cell span,
+.time-summary-card span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.time-clock-cell strong,
+.time-summary-card strong {
+  font-size: 1.15rem;
+}
+
+.time-clock-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.time-record-list {
+  display: grid;
+  gap: 10px;
+}
+
+.time-record-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) repeat(4, minmax(104px, 0.65fr)) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfa;
+  padding: 12px;
+}
+
+.time-record-person,
+.time-record-cell {
+  min-width: 0;
+}
+
+.time-record-person strong,
+.time-record-person span,
+.time-record-cell strong,
+.time-record-cell span {
+  display: block;
+}
+
+.time-record-person strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.time-record-person span,
+.time-record-cell span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.time-record-cell strong {
+  font-size: 1rem;
+}
+
+.time-status {
+  display: inline-flex;
+  width: max-content;
+  min-height: 30px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.time-status.complete {
+  background: #e2f1e8;
+  color: var(--ok);
+}
+
+.time-status.open {
+  background: #eaf2fb;
+  color: var(--brand-blue);
+}
+
+.time-status.lunch {
+  background: #fff1dc;
+  color: var(--warn);
+}
+
+.time-status.missing {
+  background: #f0ece8;
+  color: var(--muted);
+}
+
 .count-record-panel {
   margin-top: 18px;
 }
@@ -2065,9 +2196,13 @@ dialog::backdrop {
   .count-row,
   .count-row.has-expiry-field,
   .count-minimum-stack,
+  .time-clock-actions,
+  .time-clock-summary,
+  .time-record-summary,
   .field-row,
   .user-form,
   .user-row,
+  .time-record-row,
   .invoice-grid,
   .invoice-record,
   .invoice-upload-row,
@@ -2116,6 +2251,7 @@ dialog::backdrop {
 
   .movement,
   .user-row,
+  .time-record-row,
   .activity-row,
   .count-record-items,
   .count-record {

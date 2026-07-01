@@ -60,6 +60,23 @@
       </section>
 
       <section class="panel staff-panel" id="staffPanel" hidden>
+        <section class="dashboard-card time-clock-card">
+          <div class="section-heading">
+            <div>
+              <h2>Ponto de hoje</h2>
+              <p class="panel-subtitle">Regista entrada, almoço e saída.</p>
+            </div>
+          </div>
+          <div class="time-clock-summary" id="timeClockSummary"></div>
+          <div class="time-clock-actions">
+            <button class="button primary" data-time-action="entry" type="button">Entrada</button>
+            <button class="button ghost" data-time-action="lunchStart" type="button">Pausa almoço</button>
+            <button class="button ghost" data-time-action="lunchEnd" type="button">Retorno almoço</button>
+            <button class="button ghost" data-time-action="exit" type="button">Saída</button>
+          </div>
+          <p class="login-status" id="timeClockStatus"></p>
+        </section>
+
         <div class="staff-dashboard" id="staffDashboard">
           <div class="stat-grid" id="staffStatCards"></div>
 

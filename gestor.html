@@ -46,6 +46,7 @@
           <button class="sidebar-button" data-view-target="faturas" type="button">Faturas</button>
           <button class="sidebar-button" data-view-target="pedidos" type="button">Lista de solicitações</button>
           <button class="sidebar-button" data-view-target="funcionarios" type="button">Funcionarios</button>
+          <button class="sidebar-button" data-view-target="ponto" type="button">Ponto</button>
           <button class="sidebar-button" data-view-target="inventario" type="button">Inventario</button>
           <button class="sidebar-button" data-view-target="movimentos" type="button">Movimentos</button>
           <button class="sidebar-button" data-view-target="registos" type="button">Estoque atualizado</button>
@@ -362,6 +363,24 @@
 
         <div class="user-feedback" id="userFeedback"></div>
         <div class="user-list" id="userList"></div>
+      </section>
+
+      <section class="panel time-record-panel manager-view" data-view="ponto" hidden>
+        <div class="panel-heading">
+          <div>
+            <h2>Ponto dos funcionários</h2>
+            <p class="panel-subtitle">Entrada, pausa de almoço, retorno e saída por funcionário.</p>
+          </div>
+          <div class="row-actions">
+            <label class="compact-date-field">
+              Data
+              <input id="timeRecordDate" type="date" />
+            </label>
+            <button class="button ghost" id="refreshTimeRecordsButton" type="button">Atualizar ponto</button>
+          </div>
+        </div>
+        <div class="time-record-summary" id="timeRecordSummary"></div>
+        <div class="time-record-list" id="timeRecordList"></div>
       </section>
 
       <section class="panel purchase-panel manager-view" data-view="pedidos" hidden>

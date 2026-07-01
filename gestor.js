@@ -64,6 +64,7 @@ let selectedPurchaseIds = new Set(load(PURCHASE_SELECTION_KEY, []));
 let countRecords = [];
 let revenueRecords = [];
 let invoiceRecords = [];
+let timeRecords = [];
 let activities = load(ACTIVITIES_KEY, []).map(normalizeActivity);
 
 const elements = {
@@ -148,6 +149,10 @@ const elements = {
   refreshUsersButton: document.querySelector("#refreshUsersButton"),
   userFeedback: document.querySelector("#userFeedback"),
   userList: document.querySelector("#userList"),
+  timeRecordDate: document.querySelector("#timeRecordDate"),
+  refreshTimeRecordsButton: document.querySelector("#refreshTimeRecordsButton"),
+  timeRecordSummary: document.querySelector("#timeRecordSummary"),
+  timeRecordList: document.querySelector("#timeRecordList"),
   purchaseList: document.querySelector("#purchaseList"),
   purchaseCountInfo: document.querySelector("#purchaseCountInfo"),
   selectedPurchaseInfo: document.querySelector("#selectedPurchaseInfo"),
@@ -192,6 +197,7 @@ elements.sidebarButtons.forEach((button) => {
   button.addEventListener("click", () => setManagerView(button.dataset.viewTarget));
 });
 elements.managerDate.value = todayDateText();
+elements.timeRecordDate.value = todayDateText();
 elements.managerDate.addEventListener("change", renderManagerDashboard);
 elements.managerDashboard.addEventListener("click", handleManagerDashboardAction);
 elements.form.addEventListener("submit", saveItem);
@@ -218,6 +224,8 @@ elements.userForm.addEventListener("submit", saveUser);
 elements.resetUserFormButton.addEventListener("click", resetUserForm);
 elements.refreshUsersButton.addEventListener("click", fetchUsers);
 elements.userList.addEventListener("click", handleUserAction);
+elements.refreshTimeRecordsButton.addEventListener("click", fetchTimeRecords);
+elements.timeRecordDate.addEventListener("change", fetchTimeRecords);
 elements.purchaseList.addEventListener("change", handlePurchaseSelection);
 elements.selectAllPurchasesButton.addEventListener("click", selectAllPurchases);
 elements.clearPurchasesButton.addEventListener("click", clearPurchaseSelection);
@@ -246,6 +254,7 @@ fetchCountRecords();
 fetchRevenueRecords();
 fetchInvoiceRecords();
 fetchUsers();
+fetchTimeRecords();
 resetRevenueForm();
 resetInvoiceForm();
 
@@ -429,6 +438,7 @@ function renderManagerDashboard() {
     { iconName: "orders", label: "Lançar faturas", tone: "orange", action: "faturas" },
     { iconName: "movement", label: "Ajuste de Estoque", tone: "green", action: "ajuste" },
     { iconName: "search", label: "Consultar Estoque", tone: "blue", action: "consulta" },
+    { iconName: "check", label: "Ponto", tone: "blue", action: "ponto" },
     { iconName: "sales", label: "Registro financeiro", tone: "purple", action: "relatorio" },
     { iconName: "orders", label: "Lista de Atividades", tone: "green", action: "atividades" },
   ].forEach((button) => elements.managerQuickActions.appendChild(AcaiUI.QuickActionButton(button)));
@@ -477,6 +487,7 @@ function handleManagerDashboardAction(event) {
   if (action === "relatorio") return setManagerView("faturacao");
   if (action === "atividades") return setManagerView("atividades");
   if (action === "faturas") return setManagerView("faturas");
+  if (action === "ponto") return setManagerView("ponto");
   if (action === "producao" || action === "movimentos") return setManagerView("movimentos");
   if (action === "pedidos") return setManagerView("pedidos");
   if (action === "consulta") {
@@ -1300,6 +1311,99 @@ function renderUsers(users) {
 
     elements.userList.appendChild(section);
   }
+}
+
+async function fetchTimeRecords() {
+  if (!elements.timeRecordList) return;
+  const date = elements.timeRecordDate.value || todayDateText();
+  elements.timeRecordList.innerHTML = '<div class="empty-state"><h3>A carregar ponto</h3><p>A consultar os registos do dia.</p></div>';
+
+  try {
+    const response = await fetch(`/api/time-records?date=${encodeURIComponent(date)}`);
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao carregar ponto.");
+    timeRecords = result.records || [];
+    renderTimeRecords();
+  } catch (error) {
+    timeRecords = [];
+    elements.timeRecordSummary.innerHTML = "";
+    elements.timeRecordList.innerHTML = `<div class="empty-state"><h3>Sem ponto</h3><p>${escapeHtml(error.message || "Nao foi possivel carregar o ponto.")}</p></div>`;
+  }
+}
+
+function renderTimeRecords() {
+  const records = [...timeRecords].sort((a, b) => {
+    const sectorCompare = String(a.employeeSector || "").localeCompare(String(b.employeeSector || ""));
+    if (sectorCompare !== 0) return sectorCompare;
+    return String(a.employeeName || "").localeCompare(String(b.employeeName || ""));
+  });
+  const completed = records.filter((record) => Boolean(record.entryAt && record.exitAt)).length;
+  const inLunch = records.filter((record) => Boolean(record.lunchStartAt && !record.lunchEndAt)).length;
+  const open = records.filter((record) => Boolean(record.entryAt && !record.exitAt)).length;
+
+  elements.timeRecordSummary.innerHTML = `
+    <article class="time-summary-card">
+      <span>Funcionários com ponto</span>
+      <strong>${formatNumber(records.length)}</strong>
+    </article>
+    <article class="time-summary-card">
+      <span>Em serviço</span>
+      <strong>${formatNumber(open)}</strong>
+    </article>
+    <article class="time-summary-card">
+      <span>Em almoço</span>
+      <strong>${formatNumber(inLunch)}</strong>
+    </article>
+    <article class="time-summary-card">
+      <span>Dias fechados</span>
+      <strong>${formatNumber(completed)}</strong>
+    </article>
+  `;
+
+  elements.timeRecordList.innerHTML = "";
+  if (records.length === 0) {
+    elements.timeRecordList.innerHTML = '<div class="empty-state"><h3>Sem registos de ponto</h3><p>Ainda ninguém registou ponto nesta data.</p></div>';
+    return;
+  }
+
+  records.forEach((record) => elements.timeRecordList.appendChild(renderTimeRecordRow(record)));
+}
+
+function renderTimeRecordRow(record) {
+  const status = timeRecordStatus(record);
+  const row = document.createElement("article");
+  row.className = "time-record-row";
+  row.innerHTML = `
+    <div class="time-record-person">
+      <strong>${escapeHtml(record.employeeName || "Funcionario")}</strong>
+      <span>${escapeHtml(record.employeeSector || "Sem setor")} | ${escapeHtml(record.employeeUsername || "sem utilizador")}</span>
+    </div>
+    <div class="time-record-cell">
+      <span>Entrada</span>
+      <strong>${formatTime(record.entryAt)}</strong>
+    </div>
+    <div class="time-record-cell">
+      <span>Pausa almoço</span>
+      <strong>${formatTime(record.lunchStartAt)}</strong>
+    </div>
+    <div class="time-record-cell">
+      <span>Retorno almoço</span>
+      <strong>${formatTime(record.lunchEndAt)}</strong>
+    </div>
+    <div class="time-record-cell">
+      <span>Saída</span>
+      <strong>${formatTime(record.exitAt)}</strong>
+    </div>
+    <span class="time-status ${status.className}">${escapeHtml(status.label)}</span>
+  `;
+  return row;
+}
+
+function timeRecordStatus(record) {
+  if (record.entryAt && record.exitAt) return { label: "Dia fechado", className: "complete" };
+  if (record.lunchStartAt && !record.lunchEndAt) return { label: "Em almoço", className: "lunch" };
+  if (record.entryAt) return { label: "Em serviço", className: "open" };
+  return { label: "Sem entrada", className: "missing" };
 }
 
 async function saveUser(event) {
@@ -2272,6 +2376,13 @@ function formatDate(dateText) {
 
 function formatDateTime(dateText) {
   return new Intl.DateTimeFormat("pt-PT", { dateStyle: "short", timeStyle: "short" }).format(new Date(dateText));
+}
+
+function formatTime(dateText) {
+  if (!dateText) return "--:--";
+  const date = new Date(dateText);
+  if (Number.isNaN(date.getTime())) return "--:--";
+  return new Intl.DateTimeFormat("pt-PT", { hour: "2-digit", minute: "2-digit" }).format(date);
 }
 
 function todayDateText() {

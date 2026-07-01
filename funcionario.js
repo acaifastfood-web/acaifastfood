@@ -24,6 +24,9 @@ const elements = {
   staffViewAllCriticalButton: document.querySelector("#staffViewAllCriticalButton"),
   staffReportButton: document.querySelector("#staffReportButton"),
   staffCountSection: document.querySelector("#staffCountSection"),
+  timeClockSummary: document.querySelector("#timeClockSummary"),
+  timeClockStatus: document.querySelector("#timeClockStatus"),
+  timeClockButtons: document.querySelectorAll("[data-time-action]"),
   loginForm: document.querySelector("#loginForm"),
   loginUsername: document.querySelector("#loginUsername"),
   loginPassword: document.querySelector("#loginPassword"),
@@ -58,6 +61,9 @@ elements.staffQuickActions.addEventListener("click", handleStaffDashboardAction)
 elements.staffViewAllCriticalButton.addEventListener("click", () => handleStaffAction("critical"));
 elements.staffReportButton.addEventListener("click", () => handleStaffAction("report"));
 elements.staffBottomNav.addEventListener("click", handleStaffNavigation);
+elements.timeClockButtons.forEach((button) => {
+  button.addEventListener("click", () => punchTime(button.dataset.timeAction));
+});
 
 renderControlTypeOptions();
 renderCountList();
@@ -133,6 +139,7 @@ function showLogin(message) {
   elements.staffBottomNav.hidden = true;
   elements.appGreeting.textContent = "Olá";
   elements.loginStatus.textContent = message || "";
+  renderTimeClock(null);
 }
 
 function showApp() {
@@ -144,6 +151,89 @@ function showApp() {
   elements.staffBottomNav.hidden = false;
   elements.loginStatus.textContent = "";
   renderStaffDashboard();
+  fetchMyTimeRecord();
+}
+
+async function fetchMyTimeRecord() {
+  if (!auth?.token) return;
+  elements.timeClockStatus.textContent = "A carregar ponto...";
+  setTimeClockButtonsDisabled(true);
+  try {
+    const response = await fetch("/api/time-records/me", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ authToken: auth.token, date: todayDateText() }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao carregar ponto.");
+    renderTimeClock(result.record);
+    elements.timeClockStatus.textContent = "";
+  } catch (error) {
+    renderTimeClock(null);
+    elements.timeClockStatus.textContent = error.message || "Erro ao carregar ponto.";
+  } finally {
+    setTimeClockButtonsDisabled(false);
+  }
+}
+
+async function punchTime(action) {
+  if (!auth?.token) {
+    showLogin("Faz login novamente antes de registrar o ponto.");
+    return;
+  }
+
+  elements.timeClockStatus.textContent = "A registrar ponto...";
+  setTimeClockButtonsDisabled(true);
+  try {
+    const response = await fetch("/api/time-records/punch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ authToken: auth.token, date: todayDateText(), action }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao registrar ponto.");
+    renderTimeClock(result.record);
+    elements.timeClockStatus.textContent = `${timeActionLabel(action)} registrada.`;
+  } catch (error) {
+    elements.timeClockStatus.textContent = error.message || "Erro ao registrar ponto.";
+  } finally {
+    setTimeClockButtonsDisabled(false);
+  }
+}
+
+function renderTimeClock(record) {
+  if (!elements.timeClockSummary) return;
+  const cells = [
+    ["Entrada", record?.entryAt],
+    ["Pausa almoço", record?.lunchStartAt],
+    ["Retorno almoço", record?.lunchEndAt],
+    ["Saída", record?.exitAt],
+  ];
+  elements.timeClockSummary.innerHTML = cells
+    .map(
+      ([label, value]) => `
+        <article class="time-clock-cell">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(formatTime(value))}</strong>
+        </article>
+      `,
+    )
+    .join("");
+}
+
+function setTimeClockButtonsDisabled(disabled) {
+  elements.timeClockButtons.forEach((button) => {
+    button.disabled = disabled;
+  });
+}
+
+function timeActionLabel(action) {
+  return {
+    entry: "Entrada",
+    lunchStart: "Pausa para almoço",
+    lunchEnd: "Retorno do almoço",
+    exit: "Saída",
+  }[action] || "Ponto";
 }
 
 async function checkNotionStatus() {
@@ -757,6 +847,20 @@ function formatNumber(value) {
 function formatDate(dateText) {
   if (!dateText) return "Sem data";
   return new Intl.DateTimeFormat("pt-PT").format(new Date(`${dateText}T00:00:00`));
+}
+
+function formatTime(dateText) {
+  if (!dateText) return "--:--";
+  const date = new Date(dateText);
+  if (Number.isNaN(date.getTime())) return "--:--";
+  return new Intl.DateTimeFormat("pt-PT", { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function todayDateText() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
 }
 
 function escapeHtml(value) {

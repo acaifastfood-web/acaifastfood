@@ -1,5 +1,6 @@
 .env
 count-records.json
+time-records.json
 app-users.json
 faturacao-records.json
 invoice-records.json
