@@ -409,7 +409,7 @@ function renderManagerDashboard() {
   [
     { iconName: "stock", value: items.length, label: "Itens em estoque", description: "Produtos ativos", tone: "purple", action: "estoque" },
     { iconName: "alert", value: lowStock.length, label: "Itens críticos", description: "Abaixo do mínimo", tone: "red", action: "critical" },
-    { iconName: "production", value: productionsToday, label: "Produções hoje", description: "Registos do dia", tone: "orange", action: "producao" },
+    { iconName: "production", value: productionsToday, label: "Produções hoje", description: "Lançamentos do dia", tone: "orange", action: "producao" },
     { iconName: "movement", value: todayMovements.length, label: "Movimentações hoje", description: "Entradas e saídas", tone: "blue", action: "movimentos" },
     { iconName: "orders", value: pendingActivities, label: "Atividades pendentes", description: "Ideias e pendências", tone: "green", action: "atividades" },
   ].forEach((card) => elements.managerStatCards.appendChild(AcaiUI.StatCard(card)));
@@ -1424,7 +1424,7 @@ function renderPurchaseSuggestions() {
   elements.copyPurchasesButton.disabled = selectedSuggestions.length === 0;
 
   if (suggestions.length === 0) {
-    elements.purchaseList.innerHTML = '<div class="empty-state"><h3>Sem pedidos sugeridos</h3><p>Depois da contagem, os produtos abaixo do minimo aparecem aqui.</p></div>';
+    elements.purchaseList.innerHTML = '<div class="empty-state"><h3>Sem solicitações sugeridas</h3><p>Depois da contagem, os produtos abaixo do minimo aparecem aqui.</p></div>';
     return;
   }
 
@@ -1503,23 +1503,23 @@ function renderMovements() {
 }
 
 async function fetchCountRecords() {
-  elements.countRecordList.innerHTML = '<div class="empty-state"><h3>A carregar registos</h3></div>';
+  elements.countRecordList.innerHTML = '<div class="empty-state"><h3>A carregar estoque atualizado</h3></div>';
 
   try {
     const response = await fetch("/api/count-records");
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "Falha ao carregar registos.");
+    if (!response.ok) throw new Error(result.error || "Falha ao carregar estoque atualizado.");
     countRecords = result.records || [];
     renderCountRecords(countRecords);
   } catch (error) {
-    elements.countRecordList.innerHTML = `<div class="empty-state"><h3>Sem registos</h3><p>${escapeHtml(error.message || "Nao foi possivel carregar o historico.")}</p></div>`;
+    elements.countRecordList.innerHTML = `<div class="empty-state"><h3>Sem estoque atualizado</h3><p>${escapeHtml(error.message || "Nao foi possivel carregar o historico.")}</p></div>`;
   }
 }
 
 function renderCountRecords(records) {
   elements.countRecordList.innerHTML = "";
   if (records.length === 0) {
-    elements.countRecordList.innerHTML = '<div class="empty-state"><h3>Sem registos</h3><p>Quando um funcionario guardar contagens, o historico aparece aqui.</p></div>';
+    elements.countRecordList.innerHTML = '<div class="empty-state"><h3>Sem estoque atualizado</h3><p>Quando um funcionario guardar contagens, o historico aparece aqui.</p></div>';
     return;
   }
 
@@ -1943,7 +1943,7 @@ async function copySelectedPurchases() {
 }
 
 function buildPurchaseText(selected) {
-  const lines = [`Relacao de pedidos - ${new Date().toLocaleDateString("pt-PT")}`];
+  const lines = [`Lista de solicitações - ${new Date().toLocaleDateString("pt-PT")}`];
   for (const group of groupBySupplier(selected)) {
     lines.push("", `Fornecedor: ${group.supplier}`);
     for (const item of group.items) {
