@@ -425,7 +425,7 @@ function renderManagerDashboard() {
   elements.managerQuickActions.innerHTML = "";
   [
     { iconName: "check", label: "Lançar Estoque", tone: "purple", action: "estoque" },
-    { iconName: "production", label: "Nova Produção", tone: "orange", action: "producao" },
+    { iconName: "orders", label: "Lançar faturas", tone: "orange", action: "faturas" },
     { iconName: "movement", label: "Ajuste de Estoque", tone: "green", action: "ajuste" },
     { iconName: "search", label: "Consultar Estoque", tone: "blue", action: "consulta" },
     { iconName: "sales", label: "Registro financeiro", tone: "purple", action: "relatorio" },
@@ -473,6 +473,7 @@ function handleManagerDashboardAction(event) {
   }
   if (action === "relatorio") return setManagerView("faturacao");
   if (action === "atividades") return setManagerView("atividades");
+  if (action === "faturas") return setManagerView("faturas");
   if (action === "producao" || action === "movimentos") return setManagerView("movimentos");
   if (action === "pedidos") return setManagerView("pedidos");
   if (action === "consulta") {
