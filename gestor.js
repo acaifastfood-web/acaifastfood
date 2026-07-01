@@ -375,6 +375,7 @@ function renderManagerDashboard() {
     { iconName: "production", label: "Nova Produção", tone: "orange", action: "producao" },
     { iconName: "movement", label: "Ajuste de Estoque", tone: "green", action: "ajuste" },
     { iconName: "search", label: "Consultar Estoque", tone: "blue", action: "consulta" },
+    { iconName: "sales", label: "Registro financeiro", tone: "purple", action: "relatorio" },
     { iconName: "orders", label: "Lista de Atividades", tone: "green", action: "atividades" },
   ].forEach((button) => elements.managerQuickActions.appendChild(AcaiUI.QuickActionButton(button)));
 
