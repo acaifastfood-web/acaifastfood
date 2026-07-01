@@ -1377,6 +1377,7 @@ function renderTimeRecordRow(record) {
     <div class="time-record-person">
       <strong>${escapeHtml(record.employeeName || "Funcionario")}</strong>
       <span>${escapeHtml(record.employeeSector || "Sem setor")} | ${escapeHtml(record.employeeUsername || "sem utilizador")}</span>
+      <span>${escapeHtml(timeLocationText(record.lastLocation))}</span>
     </div>
     <div class="time-record-cell">
       <span>Entrada</span>
@@ -1404,6 +1405,18 @@ function timeRecordStatus(record) {
   if (record.lunchStartAt && !record.lunchEndAt) return { label: "Em almoço", className: "lunch" };
   if (record.entryAt) return { label: "Em serviço", className: "open" };
   return { label: "Sem entrada", className: "missing" };
+}
+
+function timeLocationText(location) {
+  if (!location) return "Sem validação geográfica";
+  if (location.status === "inside") {
+    const distance = Number.isFinite(Number(location.distanceMeters)) ? `${Math.round(Number(location.distanceMeters))} m da loja` : "dentro da loja";
+    const accuracy = Number.isFinite(Number(location.accuracyMeters)) ? `precisão ${Math.round(Number(location.accuracyMeters))} m` : "";
+    return [`Localização validada`, distance, accuracy].filter(Boolean).join(" | ");
+  }
+  if (location.status === "outside") return "Tentativa fora da loja";
+  if (location.status === "low_accuracy") return "GPS com baixa precisão";
+  return "Sem validação geográfica";
 }
 
 async function saveUser(event) {

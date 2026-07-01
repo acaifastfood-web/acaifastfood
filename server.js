@@ -15,6 +15,7 @@ const NOTION_INVOICE_DATABASE_ID = process.env.NOTION_INVOICE_DATABASE_ID || "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-5-mini";
 const OPENAI_VISION_FALLBACK_MODELS = ["gpt-5.5", "gpt-4.1-mini", "gpt-4o-mini"];
+const TIME_CLOCK_LOCATION = getTimeClockLocationConfig();
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
 ensureDataDir();
 const COUNT_RECORDS_PATH = path.join(DATA_DIR, "count-records.json");
@@ -347,6 +348,10 @@ async function handleTimePunch(request, response) {
   if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente antes de registrar o ponto." });
   const action = normalizeTimeAction(body.action);
   if (!action) return sendJson(response, 400, { error: "Tipo de ponto invalido." });
+  const locationCheck = validateTimeClockLocation(body.location);
+  if (!locationCheck.ok) {
+    return sendJson(response, locationCheck.status || 403, { error: locationCheck.error, location: locationCheck.location || null });
+  }
 
   const date = normalizeDate(body.date) || todayDateText();
   const records = readTimeRecords();
@@ -358,12 +363,14 @@ async function handleTimePunch(request, response) {
 
   const now = new Date().toISOString();
   record[timeActionField(action)] = now;
+  record.lastLocation = locationCheck.location;
   record.updatedAt = now;
   record.events.unshift({
     id: crypto.randomUUID(),
     action,
     label: timeActionLabel(action),
     createdAt: now,
+    location: locationCheck.location,
   });
   record.events = record.events.slice(0, 40);
   writeTimeRecords(records);
@@ -839,6 +846,100 @@ function normalizeDate(value) {
 
 function todayDateText() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function getTimeClockLocationConfig() {
+  const latitude = optionalNumber(process.env.STORE_LATITUDE || process.env.TIME_CLOCK_STORE_LATITUDE);
+  const longitude = optionalNumber(process.env.STORE_LONGITUDE || process.env.TIME_CLOCK_STORE_LONGITUDE);
+  return {
+    configured: Number.isFinite(latitude) && Number.isFinite(longitude),
+    latitude,
+    longitude,
+    radiusMeters: positiveNumber(process.env.STORE_RADIUS_METERS || process.env.TIME_CLOCK_RADIUS_METERS, 80),
+    maxAccuracyMeters: positiveNumber(process.env.STORE_MAX_ACCURACY_METERS || process.env.TIME_CLOCK_MAX_ACCURACY_METERS, 120),
+  };
+}
+
+function validateTimeClockLocation(location) {
+  if (!TIME_CLOCK_LOCATION.configured) {
+    return {
+      ok: false,
+      status: 503,
+      error: "Localizacao da loja nao configurada. Configure STORE_LATITUDE e STORE_LONGITUDE no Render.",
+    };
+  }
+
+  const latitude = optionalNumber(location?.latitude);
+  const longitude = optionalNumber(location?.longitude);
+  const accuracy = optionalNumber(location?.accuracy);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return { ok: false, status: 400, error: "Nao foi possivel ler a localizacao do telemovel." };
+  }
+  if (!Number.isFinite(accuracy) || accuracy <= 0) {
+    return { ok: false, status: 400, error: "A localizacao nao informou precisao suficiente para validar o ponto." };
+  }
+  if (accuracy > TIME_CLOCK_LOCATION.maxAccuracyMeters) {
+    return {
+      ok: false,
+      status: 403,
+      error: `Ponto nao registado. A precisao do GPS esta baixa (${Math.round(accuracy)} m). Tenta novamente com GPS ativo perto da loja.`,
+      location: { status: "low_accuracy", accuracyMeters: Math.round(accuracy) },
+    };
+  }
+
+  const distanceMeters = distanceBetweenMeters(latitude, longitude, TIME_CLOCK_LOCATION.latitude, TIME_CLOCK_LOCATION.longitude);
+  if (distanceMeters > TIME_CLOCK_LOCATION.radiusMeters) {
+    return {
+      ok: false,
+      status: 403,
+      error: `Ponto nao registado. Estás a ${Math.round(distanceMeters)} m da loja; o limite é ${Math.round(TIME_CLOCK_LOCATION.radiusMeters)} m.`,
+      location: {
+        status: "outside",
+        distanceMeters: Math.round(distanceMeters),
+        accuracyMeters: Math.round(accuracy),
+        radiusMeters: Math.round(TIME_CLOCK_LOCATION.radiusMeters),
+        capturedAt: validIsoDate(location?.capturedAt) || new Date().toISOString(),
+      },
+    };
+  }
+
+  return {
+    ok: true,
+    location: {
+      status: "inside",
+      distanceMeters: Math.round(distanceMeters),
+      accuracyMeters: Math.round(accuracy),
+      radiusMeters: Math.round(TIME_CLOCK_LOCATION.radiusMeters),
+      capturedAt: validIsoDate(location?.capturedAt) || new Date().toISOString(),
+    },
+  };
+}
+
+function distanceBetweenMeters(lat1, lon1, lat2, lon2) {
+  const radius = 6371000;
+  const phi1 = degreesToRadians(lat1);
+  const phi2 = degreesToRadians(lat2);
+  const deltaPhi = degreesToRadians(lat2 - lat1);
+  const deltaLambda = degreesToRadians(lon2 - lon1);
+  const a =
+    Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+    Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+  return radius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function degreesToRadians(value) {
+  return (value * Math.PI) / 180;
+}
+
+function optionalNumber(value) {
+  if (value === null || value === undefined || String(value).trim() === "") return NaN;
+  const parsed = Number(String(value).trim().replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+function positiveNumber(value, fallback) {
+  const parsed = optionalNumber(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 async function syncRevenueRecordToNotion(record) {
@@ -2235,6 +2336,7 @@ function normalizeTimeRecord(record) {
     lunchStartAt: validIsoDate(record.lunchStartAt),
     lunchEndAt: validIsoDate(record.lunchEndAt),
     exitAt: validIsoDate(record.exitAt),
+    lastLocation: normalizeTimeLocation(record.lastLocation),
     createdAt: validIsoDate(record.createdAt) || now,
     updatedAt: validIsoDate(record.updatedAt) || validIsoDate(record.createdAt) || now,
     events: Array.isArray(record.events)
@@ -2244,6 +2346,7 @@ function normalizeTimeRecord(record) {
             action: normalizeTimeAction(event.action),
             label: event.label || timeActionLabel(event.action),
             createdAt: validIsoDate(event.createdAt) || now,
+            location: normalizeTimeLocation(event.location),
           }))
           .filter((event) => event.action)
       : [],
@@ -2267,9 +2370,23 @@ function buildEmptyTimeRecord(session, date) {
     lunchStartAt: "",
     lunchEndAt: "",
     exitAt: "",
+    lastLocation: null,
     createdAt: now,
     updatedAt: now,
     events: [],
+  };
+}
+
+function normalizeTimeLocation(location) {
+  if (!location || typeof location !== "object") return null;
+  const status = ["inside", "outside", "low_accuracy"].includes(String(location.status || "")) ? String(location.status) : "";
+  if (!status) return null;
+  return {
+    status,
+    distanceMeters: Number.isFinite(Number(location.distanceMeters)) ? Math.round(Number(location.distanceMeters)) : null,
+    accuracyMeters: Number.isFinite(Number(location.accuracyMeters)) ? Math.round(Number(location.accuracyMeters)) : null,
+    radiusMeters: Number.isFinite(Number(location.radiusMeters)) ? Math.round(Number(location.radiusMeters)) : null,
+    capturedAt: validIsoDate(location.capturedAt) || "",
   };
 }
 

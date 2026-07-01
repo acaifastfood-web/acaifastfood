@@ -167,7 +167,7 @@ async function fetchMyTimeRecord() {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Falha ao carregar ponto.");
     renderTimeClock(result.record);
-    elements.timeClockStatus.textContent = "";
+    elements.timeClockStatus.textContent = timeLocationText(result.record?.lastLocation);
   } catch (error) {
     renderTimeClock(null);
     elements.timeClockStatus.textContent = error.message || "Erro ao carregar ponto.";
@@ -182,18 +182,22 @@ async function punchTime(action) {
     return;
   }
 
-  elements.timeClockStatus.textContent = "A registrar ponto...";
+  elements.timeClockStatus.textContent = "A obter localização...";
   setTimeClockButtonsDisabled(true);
   try {
+    const location = await getTimeClockLocation();
+    elements.timeClockStatus.textContent = "A registrar ponto...";
     const response = await fetch("/api/time-records/punch", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ authToken: auth.token, date: todayDateText(), action }),
+      body: JSON.stringify({ authToken: auth.token, date: todayDateText(), action, location }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Falha ao registrar ponto.");
     renderTimeClock(result.record);
-    elements.timeClockStatus.textContent = `${timeActionLabel(action)} registrada.`;
+    elements.timeClockStatus.textContent = [`${timeActionLabel(action)} registrada.`, timeLocationText(result.record?.lastLocation)]
+      .filter(Boolean)
+      .join(" ");
   } catch (error) {
     elements.timeClockStatus.textContent = error.message || "Erro ao registrar ponto.";
   } finally {
@@ -234,6 +238,46 @@ function timeActionLabel(action) {
     lunchEnd: "Retorno do almoço",
     exit: "Saída",
   }[action] || "Ponto";
+}
+
+function getTimeClockLocation() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Este telemóvel não permite obter localização pelo navegador."));
+      return;
+    }
+    if (!window.isSecureContext && location.hostname !== "localhost" && location.hostname !== "127.0.0.1") {
+      reject(new Error("A localização só funciona com HTTPS. Usa o link online do app."));
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          capturedAt: new Date(position.timestamp || Date.now()).toISOString(),
+        });
+      },
+      (error) => reject(new Error(geolocationErrorMessage(error))),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    );
+  });
+}
+
+function geolocationErrorMessage(error) {
+  if (error?.code === 1) return "Permite o acesso à localização para registrar o ponto.";
+  if (error?.code === 2) return "Não foi possível encontrar a localização. Confirma se o GPS está ativo.";
+  if (error?.code === 3) return "A localização demorou demasiado. Tenta novamente perto da loja.";
+  return "Não foi possível obter a localização do telemóvel.";
+}
+
+function timeLocationText(location) {
+  if (!location || location.status !== "inside") return "";
+  const distance = Number.isFinite(Number(location.distanceMeters)) ? `${Math.round(Number(location.distanceMeters))} m da loja` : "localização validada";
+  const accuracy = Number.isFinite(Number(location.accuracyMeters)) ? `precisão ${Math.round(Number(location.accuracyMeters))} m` : "";
+  return [`Localização validada: ${distance}`, accuracy].filter(Boolean).join(" | ");
 }
 
 async function checkNotionStatus() {

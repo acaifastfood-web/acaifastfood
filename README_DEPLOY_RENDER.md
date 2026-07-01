@@ -43,9 +43,15 @@ NOTION_PROPERTY_UNIT_COST=Custo (unidade)
 NOTION_PROPERTY_SUPPLIER=Fornecedor
 NOTION_PROPERTY_ORDER_DAY=Dia de pedido
 NOTION_PROPERTY_CONTROL_TYPE=Tipo de controle 
+STORE_LATITUDE=38.000000
+STORE_LONGITUDE=-9.000000
+STORE_RADIUS_METERS=80
+STORE_MAX_ACCURACY_METERS=120
 ```
 
 Nao coloques `PORT`; o Render gere isso automaticamente.
+
+Para o sistema de ponto, troca `STORE_LATITUDE` e `STORE_LONGITUDE` pelas coordenadas reais da loja. Se essas duas variaveis nao estiverem configuradas, o app bloqueia o registo do ponto.
 
 ## 4. Abrir as apps
 
