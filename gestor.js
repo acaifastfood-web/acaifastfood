@@ -2,10 +2,60 @@ const STORAGE_KEY = "acai-fast-food-stock-v1";
 const MOVEMENTS_KEY = "acai-fast-food-movements-v1";
 const PURCHASE_SELECTION_KEY = "acai-fast-food-purchase-selection-v1";
 const ACTIVITIES_KEY = "acai-fast-food-activities-v1";
+const ACTIVITIES_SEED_KEY = "acai-fast-food-activities-seed-2026-07-01";
 const EXPIRING_DAYS = 7;
 const WHATSAPP_RECIPIENTS = [
   { label: "WhatsApp 1", phone: "351913163878" },
   { label: "WhatsApp 2", phone: "351912125244" },
+];
+const ACTIVITY_SEED_ITEMS = [
+  {
+    id: "seed-activity-stock-app",
+    title: "Aplicação para controle de estoque",
+    notes: "Em andamento | implementação provável a partir de amanhã",
+  },
+  { id: "seed-activity-headphones", title: "Compra dos fones", notes: "Em andamento" },
+  { id: "seed-activity-menu", title: "Refazer menu", notes: "Em andamento" },
+  { id: "seed-activity-drinks-price", title: "Aumento do preço das bebidas ou entrega das latas", notes: "Em andamento" },
+  { id: "seed-activity-loyalty-cards", title: "Entrega de cartões fidelidade e selos (pochetes)", notes: "Em andamento" },
+  { id: "seed-activity-google-reviews-box", title: "Caixinha para avaliações do Google", notes: "Em andamento" },
+  {
+    id: "seed-activity-packaging-brand",
+    title: "Autocolantes/carimbo nas embalagens para divulgação da marca",
+    notes: "Em andamento",
+  },
+  {
+    id: "seed-activity-controls",
+    title: "Controle completo de consumos, descontos, horários, atrasos e pausas",
+    notes: "Em andamento",
+  },
+  { id: "seed-activity-store-cleaning", title: "Limpeza completa da loja", notes: "Em andamento" },
+  { id: "seed-activity-tips", title: "Gorjetas (Claudia e Alicia)", notes: "Em andamento" },
+  { id: "seed-activity-assembly-printer", title: "Impressora da montagem", notes: "Em andamento" },
+  { id: "seed-activity-dead-hours", title: "Tarefas para as horas mortas (10/06)", notes: "Em andamento" },
+  { id: "seed-activity-paulo-uber-tab", title: "Cadastro na outra aba da Uber", notes: "Responsável: Paulo" },
+  { id: "seed-activity-vanessa-roles", title: "Definição e fixação das funções", notes: "Responsável: Vanessa" },
+  { id: "seed-activity-vanessa-checklist", title: "Check list de abertura / fecho", notes: "Responsável: Vanessa" },
+  { id: "seed-activity-joao-uber-couriers", title: "Troca dos pedidos para estafetas da Uber", notes: "Responsável: João" },
+  {
+    id: "seed-activity-joao-validity",
+    title: "Conferência de validade das bebidas para os próximos 3 meses",
+    notes: "Responsável: João",
+  },
+  { id: "seed-activity-joao-pochetes", title: "Uso diário das pochetes", notes: "Responsável: João" },
+  { id: "seed-activity-joao-glovo-bolt", title: "Glovo / Bolt", notes: "Responsável: João" },
+  {
+    id: "seed-activity-discard-auto-system",
+    title: "Novo sistema com integração automática",
+    status: "Resolvido",
+    notes: "Descartada/Suspensa",
+  },
+  {
+    id: "seed-activity-discard-hours-extension",
+    title: "Extensão de horário",
+    status: "Resolvido",
+    notes: "Descartada/Suspensa",
+  },
 ];
 
 let items = load(STORAGE_KEY, []);
@@ -187,6 +237,7 @@ elements.clearResolvedActivitiesButton.addEventListener("click", clearResolvedAc
 elements.activityList.addEventListener("change", handleActivityStatusChange);
 elements.activityList.addEventListener("click", handleActivityAction);
 
+seedActivityList();
 render();
 renderActivities();
 checkNotionStatus();
@@ -1673,6 +1724,29 @@ function resetActivityForm() {
 
 function persistActivities() {
   localStorage.setItem(ACTIVITIES_KEY, JSON.stringify(activities));
+}
+
+function seedActivityList() {
+  if (localStorage.getItem(ACTIVITIES_SEED_KEY) === "1") return;
+
+  const now = new Date().toISOString();
+  const existingTitles = new Set(activities.map((activity) => normalizeText(activity.title)));
+  const seededActivities = ACTIVITY_SEED_ITEMS.filter((activity) => !existingTitles.has(normalizeText(activity.title))).map((activity) =>
+    normalizeActivity({
+      type: "pendencia",
+      status: "Pendente",
+      createdAt: now,
+      updatedAt: now,
+      ...activity,
+    }),
+  );
+
+  if (seededActivities.length > 0) {
+    activities = [...seededActivities, ...activities];
+    persistActivities();
+  }
+
+  localStorage.setItem(ACTIVITIES_SEED_KEY, "1");
 }
 
 function normalizeActivity(activity) {
