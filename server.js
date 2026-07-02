@@ -15,6 +15,12 @@ const NOTION_INVOICE_DATABASE_ID = process.env.NOTION_INVOICE_DATABASE_ID || "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-5-mini";
 const OPENAI_VISION_FALLBACK_MODELS = ["gpt-5.5", "gpt-4.1-mini", "gpt-4o-mini"];
+const DEFAULT_STORE_LOCATION = {
+  latitude: 37.0737152,
+  longitude: -8.1002496,
+  radiusMeters: 80,
+  maxAccuracyMeters: 120,
+};
 const TIME_CLOCK_LOCATION = getTimeClockLocationConfig();
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
 ensureDataDir();
@@ -849,14 +855,19 @@ function todayDateText() {
 }
 
 function getTimeClockLocationConfig() {
-  const latitude = optionalNumber(process.env.STORE_LATITUDE || process.env.TIME_CLOCK_STORE_LATITUDE);
-  const longitude = optionalNumber(process.env.STORE_LONGITUDE || process.env.TIME_CLOCK_STORE_LONGITUDE);
+  const configuredLatitude = optionalNumber(process.env.STORE_LATITUDE || process.env.TIME_CLOCK_STORE_LATITUDE);
+  const configuredLongitude = optionalNumber(process.env.STORE_LONGITUDE || process.env.TIME_CLOCK_STORE_LONGITUDE);
+  const latitude = Number.isFinite(configuredLatitude) ? configuredLatitude : DEFAULT_STORE_LOCATION.latitude;
+  const longitude = Number.isFinite(configuredLongitude) ? configuredLongitude : DEFAULT_STORE_LOCATION.longitude;
   return {
     configured: Number.isFinite(latitude) && Number.isFinite(longitude),
     latitude,
     longitude,
-    radiusMeters: positiveNumber(process.env.STORE_RADIUS_METERS || process.env.TIME_CLOCK_RADIUS_METERS, 80),
-    maxAccuracyMeters: positiveNumber(process.env.STORE_MAX_ACCURACY_METERS || process.env.TIME_CLOCK_MAX_ACCURACY_METERS, 120),
+    radiusMeters: positiveNumber(process.env.STORE_RADIUS_METERS || process.env.TIME_CLOCK_RADIUS_METERS, DEFAULT_STORE_LOCATION.radiusMeters),
+    maxAccuracyMeters: positiveNumber(
+      process.env.STORE_MAX_ACCURACY_METERS || process.env.TIME_CLOCK_MAX_ACCURACY_METERS,
+      DEFAULT_STORE_LOCATION.maxAccuracyMeters,
+    ),
   };
 }
 

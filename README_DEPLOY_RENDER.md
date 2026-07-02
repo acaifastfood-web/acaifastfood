@@ -51,7 +51,7 @@ STORE_MAX_ACCURACY_METERS=120
 
 Nao coloques `PORT`; o Render gere isso automaticamente.
 
-Para o sistema de ponto, troca `STORE_LATITUDE` e `STORE_LONGITUDE` pelas coordenadas reais da loja. Se essas duas variaveis nao estiverem configuradas, o app bloqueia o registo do ponto.
+Para o sistema de ponto, o app ja vem configurado com a loja da Rua da Abelheira em Quarteira. Se precisares ajustar a posicao ou o raio, troca `STORE_LATITUDE` e `STORE_LONGITUDE` pelas coordenadas reais da loja.
 
 ## 4. Abrir as apps
 
