@@ -6,6 +6,22 @@ const WHATSAPP_RECIPIENTS = [
   { label: "WhatsApp 2", phone: "351912125244" },
 ];
 const REQUIRED_CONTROL_TYPES = ["Inventário Diário Sala", "Inventário Semanal Sala"];
+const CONTROL_TYPE_OPTION_OVERRIDES = [
+  {
+    key: "sala-daily",
+    value: "Inventário Diário Sala",
+    label: "Diário",
+    priority: 0,
+    aliases: ["Inventário Diário Sala", "Inventario Diario Sala", "Diário", "Diario"],
+  },
+  {
+    key: "sala-weekly",
+    value: "Inventário Semanal Sala",
+    label: "Semanal",
+    priority: 1,
+    aliases: ["Inventário Semanal Sala", "Inventario Semanal Sala", "Semanal"],
+  },
+];
 const todayText = new Date().toISOString().slice(0, 10);
 
 let items = load(STORAGE_KEY, []);
@@ -633,11 +649,12 @@ function renderControlTypeOptions() {
   elements.controlTypeFilter.innerHTML = '<option value="all">Todos</option>';
   for (const option of options) {
     const entry = document.createElement("option");
-    entry.value = option;
-    entry.textContent = option;
+    entry.value = option.value;
+    entry.textContent = option.label;
     elements.controlTypeFilter.appendChild(entry);
   }
-  elements.controlTypeFilter.value = options.includes(currentValue) ? currentValue : "all";
+  const selectedOption = options.find((option) => option.value === currentValue || option.label === currentValue || sameControlType(option.value, currentValue));
+  elements.controlTypeFilter.value = selectedOption?.value || "all";
 }
 
 function matchesControlTypeFilter(item, filter) {
@@ -648,18 +665,28 @@ function matchesControlTypeFilter(item, filter) {
 function uniqueControlTypeOptions(values) {
   const options = new Map();
   for (const value of values) {
-    const label = String(value || "").trim();
-    if (!label) continue;
-    const key = normalizeControlType(label);
-    if (!options.has(key)) options.set(key, label);
+    const option = controlTypeOptionMeta(value);
+    if (!option?.key) continue;
+    if (!options.has(option.key)) options.set(option.key, option);
   }
   return [...options.values()].sort((a, b) => {
-    const priority = (label) => {
-      const index = REQUIRED_CONTROL_TYPES.findIndex((required) => sameControlType(required, label));
-      return index === -1 ? 100 : index;
-    };
-    return priority(a) - priority(b) || a.localeCompare(b);
+    return a.priority - b.priority || a.label.localeCompare(b.label);
   });
+}
+
+function controlTypeOptionMeta(value) {
+  const label = String(value || "").trim();
+  if (!label) return null;
+  const override = CONTROL_TYPE_OPTION_OVERRIDES.find((entry) =>
+    entry.aliases.some((alias) => normalizeControlType(alias) === normalizeControlType(label))
+  );
+  if (override) return override;
+  return {
+    key: normalizeControlType(label),
+    value: label,
+    label,
+    priority: 100,
+  };
 }
 
 function groupItemsBySupplier(entries) {
