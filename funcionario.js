@@ -35,6 +35,7 @@ const elements = {
   loginStatus: document.querySelector("#loginStatus"),
   currentUserName: document.querySelector("#currentUserName"),
   logoutButton: document.querySelector("#logoutButton"),
+  headerLogoutButton: document.querySelector("#headerLogoutButton"),
   pullButton: document.querySelector("#pullButton"),
   syncBanner: document.querySelector("#syncBanner"),
   syncStatus: document.querySelector("#syncStatus"),
@@ -53,6 +54,7 @@ elements.loginForm.addEventListener("submit", login);
 elements.loginUserSelect.addEventListener("change", selectLoginUser);
 elements.showLoginPassword.addEventListener("change", toggleLoginPasswordVisibility);
 elements.logoutButton.addEventListener("click", logout);
+elements.headerLogoutButton.addEventListener("click", logout);
 elements.pullButton.addEventListener("click", pullFromNotion);
 elements.countDate.addEventListener("change", renderCountList);
 elements.controlTypeFilter.addEventListener("change", renderCountList);
@@ -194,6 +196,7 @@ function showLogin(message) {
   elements.loginPanel.hidden = false;
   elements.staffPanel.hidden = true;
   elements.staffBottomNav.hidden = true;
+  elements.headerLogoutButton.hidden = true;
   elements.appGreeting.textContent = "Olá";
   elements.loginStatus.textContent = message || "";
   renderTimeClock(null);
@@ -206,6 +209,7 @@ function showApp() {
   elements.currentUserName.textContent = name;
   elements.appGreeting.textContent = `Olá, ${name || "equipa"}`;
   elements.staffBottomNav.hidden = false;
+  elements.headerLogoutButton.hidden = false;
   elements.loginStatus.textContent = "";
   renderStaffDashboard();
   fetchMyTimeRecord();
