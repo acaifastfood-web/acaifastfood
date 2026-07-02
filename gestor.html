@@ -507,6 +507,16 @@
               </select>
             </label>
             <label>
+              Tipo de controle
+              <select id="controlType" name="controlType">
+                <option value="">Sem tipo definido</option>
+                <option value="Diário">Diário</option>
+                <option value="Semanal">Semanal</option>
+                <option value="Controle da Sala">Controle da Sala</option>
+                <option value="Pingo Doce Quinta">Pingo Doce Quinta</option>
+              </select>
+            </label>
+            <label>
               Observacoes
               <textarea id="notes" name="notes" rows="3"></textarea>
             </label>
@@ -540,6 +550,14 @@
                 <option value="Outros">Outros</option>
               </select>
             </label>
+            <label>
+              Tipo de controle
+              <select id="managerControlTypeFilter">
+                <option value="all">Todos</option>
+                <option value="Diário">Diário</option>
+                <option value="Semanal">Semanal</option>
+              </select>
+            </label>
             <button class="button ghost" id="clearFiltersButton" type="button">Limpar filtros</button>
           </div>
 
@@ -552,6 +570,7 @@
                   <th>Produto</th>
                   <th>Qtd.</th>
                   <th>Minimos</th>
+                  <th>Controle</th>
                   <th>Validade</th>
                   <th>Estado</th>
                   <th>Acoes</th>
@@ -693,6 +712,7 @@
         </td>
         <td data-field="quantity"></td>
         <td data-field="minimum"></td>
+        <td data-field="controlType"></td>
         <td data-field="expiresAt"></td>
         <td><span class="status-pill" data-field="status"></span></td>
         <td>

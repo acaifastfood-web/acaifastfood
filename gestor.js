@@ -4,6 +4,23 @@ const PURCHASE_SELECTION_KEY = "acai-fast-food-purchase-selection-v1";
 const ACTIVITIES_KEY = "acai-fast-food-activities-v1";
 const ACTIVITIES_SEED_KEY = "acai-fast-food-activities-seed-2026-07-01";
 const EXPIRING_DAYS = 7;
+const REQUIRED_CONTROL_TYPES = ["Diário", "Semanal", "Inventário Diário Sala", "Inventário Semanal Sala"];
+const CONTROL_TYPE_OPTION_OVERRIDES = [
+  {
+    key: "sala-daily",
+    value: "Diário",
+    label: "Diário",
+    priority: 0,
+    aliases: ["Inventário Diário Sala", "Inventario Diario Sala", "Diário", "Diario"],
+  },
+  {
+    key: "sala-weekly",
+    value: "Semanal",
+    label: "Semanal",
+    priority: 1,
+    aliases: ["Inventário Semanal Sala", "Inventario Semanal Sala", "Semanal"],
+  },
+];
 const WHATSAPP_RECIPIENTS = [
   { label: "WhatsApp 1", phone: "351913163878" },
   { label: "WhatsApp 2", phone: "351912125244" },
@@ -78,6 +95,8 @@ const elements = {
   searchInput: document.querySelector("#searchInput"),
   statusFilter: document.querySelector("#statusFilter"),
   categoryFilter: document.querySelector("#categoryFilter"),
+  controlType: document.querySelector("#controlType"),
+  managerControlTypeFilter: document.querySelector("#managerControlTypeFilter"),
   clearFiltersButton: document.querySelector("#clearFiltersButton"),
   managerCountInfo: document.querySelector("#managerCountInfo"),
   managerDate: document.querySelector("#managerDate"),
@@ -205,6 +224,7 @@ elements.resetFormButton.addEventListener("click", resetForm);
 elements.searchInput.addEventListener("input", render);
 elements.statusFilter.addEventListener("change", render);
 elements.categoryFilter.addEventListener("change", render);
+elements.managerControlTypeFilter.addEventListener("change", render);
 elements.clearFiltersButton.addEventListener("click", clearManagerFilters);
 elements.inventoryBody.addEventListener("click", handleTableAction);
 elements.revenueForm.addEventListener("submit", saveRevenueRecord);
@@ -292,6 +312,7 @@ function saveItem(event) {
     expiresAt: formData.get("expiresAt") || "",
     supplier: String(formData.get("supplier") || "").trim(),
     orderDay: String(formData.get("orderDay") || "").trim(),
+    controlType: String(formData.get("controlType") || "").trim(),
     notes: String(formData.get("notes") || "").trim(),
     updatedAt: new Date().toISOString(),
   });
@@ -341,6 +362,8 @@ function fillForm(item) {
   setField("expiresAt", item.expiresAt);
   setField("supplier", item.supplier);
   setField("orderDay", item.orderDay);
+  ensureControlTypeOption(elements.controlType, item.controlType);
+  setField("controlType", item.controlType);
   setField("notes", item.notes);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
@@ -394,6 +417,7 @@ function applyMovement(event) {
 
 function render() {
   renderSummary();
+  renderControlTypeOptions();
   renderPurchaseSuggestions();
   renderTable();
   renderMovements();
@@ -1249,6 +1273,7 @@ function renderTable() {
       <strong>${formatNumber(item.minimum)} ${escapeHtml(item.unit)}</strong>
       <span>semanal</span>
     `;
+    row.querySelector('[data-field="controlType"]').textContent = controlTypeDisplay(item.controlType);
     row.querySelector('[data-field="expiresAt"]').textContent = formatDate(item.expiresAt);
     const pill = row.querySelector('[data-field="status"]');
     pill.textContent = status.label;
@@ -2100,17 +2125,62 @@ function persistPurchaseSelection() {
   localStorage.setItem(PURCHASE_SELECTION_KEY, JSON.stringify([...selectedPurchaseIds]));
 }
 
+function renderControlTypeOptions() {
+  const options = uniqueControlTypeOptions([...REQUIRED_CONTROL_TYPES, ...items.flatMap((item) => splitControlTypes(item.controlType))]);
+  populateControlTypeSelect(elements.managerControlTypeFilter, options, { all: true });
+  populateControlTypeSelect(elements.controlType, options, { blank: true });
+}
+
+function populateControlTypeSelect(select, options, config = {}) {
+  if (!select) return;
+  const currentValue = select.value || (config.all ? "all" : "");
+  select.innerHTML = config.all ? '<option value="all">Todos</option>' : '<option value="">Sem tipo definido</option>';
+  for (const option of options) {
+    const entry = document.createElement("option");
+    entry.value = option.value;
+    entry.textContent = option.label;
+    select.appendChild(entry);
+  }
+  const selectedOption = options.find((option) => option.value === currentValue || option.label === currentValue || sameControlType(option.value, currentValue));
+  select.value = selectedOption?.value || (config.all ? "all" : "");
+}
+
+function uniqueControlTypeOptions(values) {
+  const options = new Map();
+  for (const value of values) {
+    const option = controlTypeOptionMeta(value);
+    if (!option?.key) continue;
+    if (!options.has(option.key)) options.set(option.key, option);
+  }
+  return [...options.values()].sort((a, b) => a.priority - b.priority || a.label.localeCompare(b.label));
+}
+
+function controlTypeOptionMeta(value) {
+  const label = String(value || "").trim();
+  if (!label) return null;
+  const override = CONTROL_TYPE_OPTION_OVERRIDES.find((entry) => entry.aliases.some((alias) => normalizeText(alias) === normalizeText(label)));
+  if (override) return override;
+  return {
+    key: normalizeText(label),
+    value: label,
+    label,
+    priority: 100,
+  };
+}
+
 function getFilteredItems() {
   const term = elements.searchInput.value.trim().toLowerCase();
   const status = elements.statusFilter.value;
   const category = elements.categoryFilter.value;
+  const controlType = elements.managerControlTypeFilter.value;
 
   return items
     .filter((item) => {
-      const haystack = `${item.name} ${item.category} ${item.supplier} ${item.notes}`.toLowerCase();
+      const haystack = `${item.name} ${item.category} ${item.supplier} ${item.controlType} ${item.notes}`.toLowerCase();
       return !term || haystack.includes(term);
     })
     .filter((item) => category === "all" || item.category === category)
+    .filter((item) => matchesControlTypeFilter(item, controlType))
     .filter((item) => {
       if (status === "all") return true;
       if (status === "low") return isLowStock(item);
@@ -2120,10 +2190,46 @@ function getFilteredItems() {
     .sort((a, b) => getStatus(b).priority - getStatus(a).priority || a.name.localeCompare(b.name));
 }
 
+function matchesControlTypeFilter(item, filter) {
+  if (filter === "all") return true;
+  return splitControlTypes(item.controlType).some((entry) => sameControlType(entry, filter));
+}
+
+function controlTypeDisplay(value) {
+  const labels = splitControlTypes(value).map((entry) => controlTypeOptionMeta(entry)?.label || entry).filter(Boolean);
+  return labels.length ? labels.join(", ") : "-";
+}
+
+function ensureControlTypeOption(select, value) {
+  const label = String(value || "").trim();
+  if (!select || !label) return;
+  const hasOption = [...select.options].some((option) => option.value === label);
+  if (hasOption) return;
+  const option = document.createElement("option");
+  option.value = label;
+  option.textContent = controlTypeDisplay(label);
+  select.appendChild(option);
+}
+
+function splitControlTypes(value) {
+  return String(value || "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function sameControlType(left, right) {
+  const normalizedLeft = normalizeText(left);
+  const normalizedRight = normalizeText(right);
+  if (!normalizedLeft || !normalizedRight) return false;
+  return normalizedLeft === normalizedRight || normalizedLeft.includes(normalizedRight) || normalizedRight.includes(normalizedLeft);
+}
+
 function clearManagerFilters() {
   elements.searchInput.value = "";
   elements.statusFilter.value = "all";
   elements.categoryFilter.value = "all";
+  elements.managerControlTypeFilter.value = "all";
   render();
 }
 
@@ -2323,6 +2429,7 @@ function normalizeItem(item) {
     expiresAt: item.expiresAt || "",
     supplier: item.supplier || "",
     orderDay: item.orderDay || "",
+    controlType: item.controlType || "",
     notes: item.notes || "",
     updatedAt: item.updatedAt || new Date().toISOString(),
   };

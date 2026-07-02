@@ -5,18 +5,18 @@ const WHATSAPP_RECIPIENTS = [
   { label: "WhatsApp 1", phone: "351913163878" },
   { label: "WhatsApp 2", phone: "351912125244" },
 ];
-const REQUIRED_CONTROL_TYPES = ["Inventário Diário Sala", "Inventário Semanal Sala"];
+const REQUIRED_CONTROL_TYPES = ["Diário", "Semanal", "Inventário Diário Sala", "Inventário Semanal Sala"];
 const CONTROL_TYPE_OPTION_OVERRIDES = [
   {
     key: "sala-daily",
-    value: "Inventário Diário Sala",
+    value: "Diário",
     label: "Diário",
     priority: 0,
     aliases: ["Inventário Diário Sala", "Inventario Diario Sala", "Diário", "Diario"],
   },
   {
     key: "sala-weekly",
-    value: "Inventário Semanal Sala",
+    value: "Semanal",
     label: "Semanal",
     priority: 1,
     aliases: ["Inventário Semanal Sala", "Inventario Semanal Sala", "Semanal"],
