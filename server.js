@@ -865,7 +865,7 @@ function validateTimeClockLocation(location) {
     return {
       ok: false,
       status: 503,
-      error: "Localizacao da loja nao configurada. Configure STORE_LATITUDE e STORE_LONGITUDE no Render.",
+      error: "Localizacao da loja nao configurada. Configure STORE_LATITUDE e STORE_LONGITUDE no ficheiro .env local ou no Render.",
     };
   }
 
