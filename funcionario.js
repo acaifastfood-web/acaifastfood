@@ -5,6 +5,7 @@ const WHATSAPP_RECIPIENTS = [
   { label: "WhatsApp 1", phone: "351913163878" },
   { label: "WhatsApp 2", phone: "351912125244" },
 ];
+const REQUIRED_CONTROL_TYPES = ["Inventário Diário Sala", "Inventário Semanal Sala"];
 const todayText = new Date().toISOString().slice(0, 10);
 
 let items = load(STORAGE_KEY, []);
@@ -628,7 +629,7 @@ function getFilteredItems() {
 
 function renderControlTypeOptions() {
   const currentValue = elements.controlTypeFilter.value || "all";
-  const options = [...new Set(items.flatMap((item) => splitControlTypes(item.controlType)))].sort((a, b) => a.localeCompare(b));
+  const options = uniqueControlTypeOptions([...REQUIRED_CONTROL_TYPES, ...items.flatMap((item) => splitControlTypes(item.controlType))]);
   elements.controlTypeFilter.innerHTML = '<option value="all">Todos</option>';
   for (const option of options) {
     const entry = document.createElement("option");
@@ -641,7 +642,24 @@ function renderControlTypeOptions() {
 
 function matchesControlTypeFilter(item, filter) {
   if (filter === "all") return true;
-  return splitControlTypes(item.controlType).includes(filter);
+  return splitControlTypes(item.controlType).some((entry) => sameControlType(entry, filter));
+}
+
+function uniqueControlTypeOptions(values) {
+  const options = new Map();
+  for (const value of values) {
+    const label = String(value || "").trim();
+    if (!label) continue;
+    const key = normalizeControlType(label);
+    if (!options.has(key)) options.set(key, label);
+  }
+  return [...options.values()].sort((a, b) => {
+    const priority = (label) => {
+      const index = REQUIRED_CONTROL_TYPES.findIndex((required) => sameControlType(required, label));
+      return index === -1 ? 100 : index;
+    };
+    return priority(a) - priority(b) || a.localeCompare(b);
+  });
 }
 
 function groupItemsBySupplier(entries) {
@@ -871,21 +889,36 @@ function splitControlTypes(value) {
 function showsDailyMinimum(item) {
   const selectedControl = elements.controlTypeFilter.value;
   if (selectedControl === "Controle da Sala") return true;
-  if (selectedControl === "Diário" || selectedControl === "Pingo Doce Quinta") return true;
-  if (selectedControl === "Semanal") return false;
+  if (
+    sameControlType(selectedControl, "Diário") ||
+    sameControlType(selectedControl, "Inventário Diário Sala") ||
+    sameControlType(selectedControl, "Pingo Doce Quinta")
+  ) return true;
+  if (sameControlType(selectedControl, "Semanal") || sameControlType(selectedControl, "Inventário Semanal Sala")) return false;
   return hasControlType(item, "diario") || hasControlType(item, "pingo doce quinta") || hasControlType(item, "controle da sala");
 }
 
 function showsWeeklyMinimum(item) {
   const selectedControl = elements.controlTypeFilter.value;
   if (selectedControl === "Controle da Sala") return true;
-  if (selectedControl === "Semanal") return true;
-  if (selectedControl === "Diário" || selectedControl === "Pingo Doce Quinta") return false;
+  if (sameControlType(selectedControl, "Semanal") || sameControlType(selectedControl, "Inventário Semanal Sala")) return true;
+  if (
+    sameControlType(selectedControl, "Diário") ||
+    sameControlType(selectedControl, "Inventário Diário Sala") ||
+    sameControlType(selectedControl, "Pingo Doce Quinta")
+  ) return false;
   return hasControlType(item, "semanal") || hasControlType(item, "controle da sala");
 }
 
 function hasControlType(item, expected) {
-  return splitControlTypes(item.controlType).some((entry) => normalizeControlType(entry) === expected);
+  return splitControlTypes(item.controlType).some((entry) => sameControlType(entry, expected));
+}
+
+function sameControlType(left, right) {
+  const normalizedLeft = normalizeControlType(left);
+  const normalizedRight = normalizeControlType(right);
+  if (!normalizedLeft || !normalizedRight) return false;
+  return normalizedLeft === normalizedRight || normalizedLeft.includes(normalizedRight) || normalizedRight.includes(normalizedLeft);
 }
 
 function normalizeControlType(value) {
