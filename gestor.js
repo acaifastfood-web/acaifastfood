@@ -97,6 +97,7 @@ const elements = {
   categoryFilter: document.querySelector("#categoryFilter"),
   controlType: document.querySelector("#controlType"),
   managerControlTypeFilter: document.querySelector("#managerControlTypeFilter"),
+  managerSalaFrequencyFilter: document.querySelector("#managerSalaFrequencyFilter"),
   clearFiltersButton: document.querySelector("#clearFiltersButton"),
   managerCountInfo: document.querySelector("#managerCountInfo"),
   managerDate: document.querySelector("#managerDate"),
@@ -225,6 +226,7 @@ elements.searchInput.addEventListener("input", render);
 elements.statusFilter.addEventListener("change", render);
 elements.categoryFilter.addEventListener("change", render);
 elements.managerControlTypeFilter.addEventListener("change", render);
+elements.managerSalaFrequencyFilter.addEventListener("change", render);
 elements.clearFiltersButton.addEventListener("click", clearManagerFilters);
 elements.inventoryBody.addEventListener("click", handleTableAction);
 elements.revenueForm.addEventListener("submit", saveRevenueRecord);
@@ -2173,6 +2175,7 @@ function getFilteredItems() {
   const status = elements.statusFilter.value;
   const category = elements.categoryFilter.value;
   const controlType = elements.managerControlTypeFilter.value;
+  const salaFrequency = elements.managerSalaFrequencyFilter.value;
 
   return items
     .filter((item) => {
@@ -2181,6 +2184,7 @@ function getFilteredItems() {
     })
     .filter((item) => category === "all" || item.category === category)
     .filter((item) => matchesControlTypeFilter(item, controlType))
+    .filter((item) => matchesSalaFrequencyFilter(item, salaFrequency))
     .filter((item) => {
       if (status === "all") return true;
       if (status === "low") return isLowStock(item);
@@ -2193,6 +2197,13 @@ function getFilteredItems() {
 function matchesControlTypeFilter(item, filter) {
   if (filter === "all") return true;
   return splitControlTypes(item.controlType).some((entry) => sameControlType(entry, filter));
+}
+
+function matchesSalaFrequencyFilter(item, filter) {
+  if (filter === "all") return true;
+  const frequency = filter === "weekly" ? "Semanal" : "Diário";
+  return splitControlTypes(item.controlType).some((entry) => sameControlType(entry, "Controle da Sala")) &&
+    splitControlTypes(item.controlType).some((entry) => sameControlType(entry, frequency));
 }
 
 function controlTypeDisplay(value) {
@@ -2230,6 +2241,7 @@ function clearManagerFilters() {
   elements.statusFilter.value = "all";
   elements.categoryFilter.value = "all";
   elements.managerControlTypeFilter.value = "all";
+  elements.managerSalaFrequencyFilter.value = "all";
   render();
 }
 

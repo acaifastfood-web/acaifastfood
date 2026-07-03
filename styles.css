@@ -1210,7 +1210,7 @@ textarea:focus {
 }
 
 .toolbar {
-  grid-template-columns: minmax(220px, 1fr) 180px 170px auto;
+  grid-template-columns: minmax(220px, 1fr) repeat(4, minmax(135px, 170px)) auto;
   align-items: end;
   margin-bottom: 14px;
 }
@@ -2247,7 +2247,7 @@ dialog::backdrop {
 
 .staff-toolbar {
   display: grid;
-  grid-template-columns: 160px 190px minmax(220px, 1fr) auto;
+  grid-template-columns: 160px 170px minmax(220px, 1fr) auto;
   gap: 14px;
   align-items: end;
 }

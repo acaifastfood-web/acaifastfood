@@ -59,6 +59,7 @@ const elements = {
   whatsappShare: document.querySelector("#whatsappShare"),
   countDate: document.querySelector("#countDate"),
   controlTypeFilter: document.querySelector("#controlTypeFilter"),
+  salaFrequencyFilter: document.querySelector("#salaFrequencyFilter"),
   staffSearchInput: document.querySelector("#staffSearchInput"),
   clearStaffSearchButton: document.querySelector("#clearStaffSearchButton"),
   staffCountInfo: document.querySelector("#staffCountInfo"),
@@ -75,6 +76,7 @@ elements.headerLogoutButton.addEventListener("click", logout);
 elements.pullButton.addEventListener("click", pullFromNotion);
 elements.countDate.addEventListener("change", renderCountList);
 elements.controlTypeFilter.addEventListener("change", renderCountList);
+elements.salaFrequencyFilter.addEventListener("change", renderCountList);
 elements.staffSearchInput.addEventListener("input", renderCountList);
 elements.clearStaffSearchButton.addEventListener("click", clearStaffSearch);
 elements.saveCountsButton.addEventListener("click", saveDailyCounts);
@@ -536,6 +538,7 @@ function handleStaffAction(action) {
   if (action === "critical") {
     elements.staffSearchInput.value = "";
     elements.controlTypeFilter.value = "all";
+    elements.salaFrequencyFilter.value = "all";
     renderCountList();
     elements.staffCountSection.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
@@ -544,6 +547,7 @@ function handleStaffAction(action) {
   if (action === "production") {
     const productionOption = [...elements.controlTypeFilter.options].find((option) => normalizeControlType(option.value).includes("produc"));
     elements.controlTypeFilter.value = productionOption?.value || "all";
+    elements.salaFrequencyFilter.value = "all";
     elements.staffSearchInput.value = productionOption ? "" : "produção";
     renderCountList();
     elements.staffCountSection.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -629,6 +633,7 @@ function renderExpiryField(item) {
 function getFilteredItems() {
   const term = elements.staffSearchInput.value.trim().toLowerCase();
   const controlTypeFilter = elements.controlTypeFilter.value;
+  const salaFrequencyFilter = elements.salaFrequencyFilter.value;
 
   return items
     .filter((item) => {
@@ -636,6 +641,7 @@ function getFilteredItems() {
       return !term || haystack.includes(term);
     })
     .filter((item) => matchesControlTypeFilter(item, controlTypeFilter))
+    .filter((item) => matchesSalaFrequencyFilter(item, salaFrequencyFilter))
     .sort((a, b) => {
       const supplierOrder = supplierLabel(a).localeCompare(supplierLabel(b));
       if (supplierOrder !== 0) return supplierOrder;
@@ -660,6 +666,12 @@ function renderControlTypeOptions() {
 function matchesControlTypeFilter(item, filter) {
   if (filter === "all") return true;
   return splitControlTypes(item.controlType).some((entry) => sameControlType(entry, filter));
+}
+
+function matchesSalaFrequencyFilter(item, filter) {
+  if (filter === "all") return true;
+  const frequency = filter === "weekly" ? "Semanal" : "Diário";
+  return hasControlType(item, "Controle da Sala") && hasControlType(item, frequency);
 }
 
 function uniqueControlTypeOptions(values) {
