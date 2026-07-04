@@ -12,6 +12,7 @@ const NOTION_TOKEN = process.env.NOTION_TOKEN || "";
 const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || "";
 const NOTION_REVENUE_DATABASE_ID = process.env.NOTION_REVENUE_DATABASE_ID || "";
 const NOTION_INVOICE_DATABASE_ID = process.env.NOTION_INVOICE_DATABASE_ID || "";
+const NOTION_PURCHASES_VIEW_URL = process.env.NOTION_PURCHASES_VIEW_URL || "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-5-mini";
 const OPENAI_VISION_FALLBACK_MODELS = ["gpt-5.5", "gpt-4.1-mini", "gpt-4o-mini"];
@@ -165,6 +166,10 @@ http
 
       if (requestPath === "/api/notion/status" && request.method === "GET") {
         return sendJson(response, 200, { configured: isNotionConfigured() });
+      }
+
+      if (requestPath === "/api/app-links" && request.method === "GET") {
+        return sendJson(response, 200, getAppLinks());
       }
 
       if (requestPath === "/api/notion/databases" && request.method === "GET") {
@@ -2489,6 +2494,22 @@ function invoiceStatusPriority(status) {
 
 function isNotionConfigured() {
   return Boolean(NOTION_TOKEN && NOTION_DATABASE_ID);
+}
+
+function getAppLinks() {
+  return {
+    purchasesNotionUrl: normalizedUrl(NOTION_PURCHASES_VIEW_URL) || notionDatabaseUrl(NOTION_DATABASE_ID),
+  };
+}
+
+function normalizedUrl(value) {
+  const url = String(value || "").trim();
+  return /^https?:\/\//i.test(url) ? url : "";
+}
+
+function notionDatabaseUrl(id) {
+  const normalizedId = String(id || "").replace(/-/g, "").trim();
+  return normalizedId ? `https://www.notion.so/${normalizedId}` : "";
 }
 
 function sendJson(response, status, payload) {

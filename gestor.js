@@ -177,6 +177,7 @@ const elements = {
   purchaseCountInfo: document.querySelector("#purchaseCountInfo"),
   selectedPurchaseInfo: document.querySelector("#selectedPurchaseInfo"),
   purchaseOutput: document.querySelector("#purchaseOutput"),
+  purchaseNotionLink: document.querySelector("#purchaseNotionLink"),
   selectAllPurchasesButton: document.querySelector("#selectAllPurchasesButton"),
   clearPurchasesButton: document.querySelector("#clearPurchasesButton"),
   copyPurchasesButton: document.querySelector("#copyPurchasesButton"),
@@ -271,6 +272,7 @@ elements.activityList.addEventListener("click", handleActivityAction);
 seedActivityList();
 render();
 renderActivities();
+fetchAppLinks();
 checkNotionStatus();
 fetchCountRecords();
 fetchRevenueRecords();
@@ -296,6 +298,19 @@ function updateModuleActions(viewName) {
   elements.moduleActions.forEach((action) => {
     action.hidden = action.dataset.moduleAction !== viewName;
   });
+}
+
+async function fetchAppLinks() {
+  if (!elements.purchaseNotionLink) return;
+  try {
+    const response = await fetch("/api/app-links");
+    const links = await response.json();
+    if (!response.ok || !links.purchasesNotionUrl) throw new Error("Link nao configurado.");
+    elements.purchaseNotionLink.href = links.purchasesNotionUrl;
+    elements.purchaseNotionLink.hidden = false;
+  } catch {
+    elements.purchaseNotionLink.hidden = true;
+  }
 }
 
 function saveItem(event) {
