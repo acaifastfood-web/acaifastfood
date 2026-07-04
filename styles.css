@@ -771,12 +771,14 @@ h2 {
 
 .stat-card[class*="tone-"],
 .quick-action[class*="tone-"],
+.notion-master-panel[class*="tone-"],
 .notion-division-card[class*="tone-"] {
   border-color: color-mix(in srgb, var(--tone) 25%, var(--line));
 }
 
 .stat-card[class*="tone-"] .stat-card-icon,
 .quick-action[class*="tone-"] span,
+.notion-master-panel[class*="tone-"] .notion-master-panel-head span,
 .notion-division-card[class*="tone-"] .notion-division-icon {
   background: var(--tone-bg);
   color: var(--tone);
@@ -961,6 +963,115 @@ h2 {
 .notion-link-status {
   color: var(--muted);
   margin: 6px 0 0;
+}
+
+.notion-master-dashboard {
+  margin-bottom: 16px;
+}
+
+.notion-master-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 16px;
+}
+
+.notion-master-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.notion-master-stats article {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.notion-master-stats span,
+.notion-master-panel-head span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.notion-master-stats strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 1.45rem;
+}
+
+.notion-master-stats p,
+.notion-source-note,
+.notion-mini-row span {
+  color: var(--muted);
+  margin: 5px 0 0;
+}
+
+.notion-master-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.notion-master-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.notion-master-panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.notion-master-panel-head span {
+  display: inline-flex;
+  border-radius: 999px;
+  padding: 5px 9px;
+}
+
+.notion-master-panel-head strong {
+  display: block;
+  margin-top: 8px;
+}
+
+.notion-mini-list {
+  display: grid;
+  gap: 8px;
+}
+
+.notion-mini-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.notion-mini-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.notion-mini-row strong,
+.notion-mini-row span {
+  display: block;
+}
+
+.notion-mini-row b {
+  color: var(--ink);
+  white-space: nowrap;
 }
 
 .notion-division-grid {
@@ -2594,6 +2705,8 @@ dialog::backdrop {
   .supplier-heading,
   .purchase-heading,
   .notion-overview,
+  .notion-master-stats,
+  .notion-master-grid,
   .staff-toolbar,
   .toolbar {
     grid-template-columns: 1fr;
@@ -2602,6 +2715,7 @@ dialog::backdrop {
   .supplier-heading,
   .invoice-month-heading,
   .purchase-heading,
+  .notion-master-panel-head,
   .count-record-head,
   .purchase-summary {
     align-items: flex-start;

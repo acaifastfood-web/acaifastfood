@@ -270,6 +270,7 @@ const elements = {
   activitySummary: document.querySelector("#activitySummary"),
   activityList: document.querySelector("#activityList"),
   managerNotionDashboardLink: document.querySelector("#managerNotionDashboardLink"),
+  notionMasterDashboard: document.querySelector("#notionMasterDashboard"),
   notionDivisionList: document.querySelector("#notionDivisionList"),
   notionLinkStatus: document.querySelector("#notionLinkStatus"),
   sidebarButtons: document.querySelectorAll("[data-view-target]"),
@@ -331,6 +332,7 @@ elements.resetActivityFormButton.addEventListener("click", resetActivityForm);
 elements.clearResolvedActivitiesButton.addEventListener("click", clearResolvedActivities);
 elements.activityList.addEventListener("change", handleActivityStatusChange);
 elements.activityList.addEventListener("click", handleActivityAction);
+elements.notionMasterDashboard.addEventListener("click", handleNotionMasterAction);
 elements.notionDivisionList.addEventListener("click", handleNotionDivisionAction);
 
 seedActivityList();
@@ -625,6 +627,8 @@ function renderNotionDashboard() {
     elements.managerNotionDashboardLink.hidden = true;
   }
 
+  renderNotionMasterDashboard();
+
   const managementLinks = appLinks.managementLinks || {};
   elements.notionDivisionList.innerHTML = NOTION_MANAGEMENT_DIVISIONS.map((division) => {
     const notionUrl = managementLinks[division.id] || dashboardUrl;
@@ -647,6 +651,157 @@ function renderNotionDashboard() {
   elements.notionLinkStatus.textContent = dashboardUrl || linkedCount
     ? `${linkedCount} divisões com link direto próprio; as demais abrem o Dashboard Gestão principal.`
     : "Adicione NOTION_MANAGEMENT_DASHBOARD_URL no .env/Render para abrir a página Dashboard Gestão do Notion diretamente.";
+}
+
+function renderNotionMasterDashboard() {
+  if (!elements.notionMasterDashboard) return;
+  const purchaseSuggestions = getPurchaseSuggestions();
+  const ruptures = items.filter(isRupture).sort((a, b) => a.name.localeCompare(b.name));
+  const todayPurchases = purchaseSuggestions.filter(isPurchaseDueToday);
+  const supplierGroups = groupBySupplier(purchaseSuggestions);
+  const updatedAt = latestItemUpdateText();
+
+  elements.notionMasterDashboard.innerHTML = `
+    <section class="notion-master-card">
+      <div class="section-heading">
+        <div>
+          <h3>Base Mestre</h3>
+          <p class="panel-subtitle">Leitura operacional da base carregada do Notion.</p>
+        </div>
+        <div class="row-actions">
+          <button class="button ghost" data-notion-master-action="refresh" type="button">Atualizar Notion</button>
+          <button class="button primary" data-notion-master-action="purchases" type="button">Ver compras</button>
+        </div>
+      </div>
+
+      <div class="notion-master-stats">
+        ${notionMetricCard("Produtos", items.length, "Total na base mestre")}
+        ${notionMetricCard("Rupturas", ruptures.length, "Estoque zerado")}
+        ${notionMetricCard("Comprar hoje", todayPurchases.length, todayOrderDay())}
+        ${notionMetricCard("Fornecedores", supplierGroups.length, "Com solicitação")}
+      </div>
+
+      <div class="notion-master-grid">
+        ${notionRupturesPanel(ruptures)}
+        ${notionTodayPurchasesPanel(todayPurchases)}
+        ${notionSupplierPurchasesPanel(supplierGroups)}
+      </div>
+
+      <p class="notion-source-note">Fonte: preenchimento do Notion carregado no app${updatedAt ? ` | última atualização: ${escapeHtml(updatedAt)}` : ""}.</p>
+    </section>
+  `;
+}
+
+function notionMetricCard(label, value, description) {
+  return `
+    <article>
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(formatNumber(value))}</strong>
+      <p>${escapeHtml(description)}</p>
+    </article>
+  `;
+}
+
+function notionRupturesPanel(ruptures) {
+  const rows = ruptures.slice(0, 6).map((item) => `
+    <article class="notion-mini-row">
+      <div>
+        <strong>${escapeHtml(item.name)}</strong>
+        <span>${escapeHtml([supplierLabel(item), item.category].filter(Boolean).join(" | "))}</span>
+      </div>
+      <b>${formatNumber(item.quantity)} ${escapeHtml(item.unit)}</b>
+    </article>
+  `).join("");
+
+  return `
+    <section class="notion-master-panel tone-red">
+      <div class="notion-master-panel-head">
+        <div>
+          <span>Rupturas</span>
+          <strong>${formatNumber(ruptures.length)} produtos</strong>
+        </div>
+        <button class="text-action" data-notion-master-action="ruptures" type="button">Ver no estoque</button>
+      </div>
+      <div class="notion-mini-list">${rows || '<div class="mini-empty">Sem rupturas na base carregada.</div>'}</div>
+    </section>
+  `;
+}
+
+function notionTodayPurchasesPanel(todayPurchases) {
+  const rows = todayPurchases.slice(0, 6).map((item) => `
+    <article class="notion-mini-row">
+      <div>
+        <strong>${escapeHtml(item.name)}</strong>
+        <span>${escapeHtml(supplierLabel(item))}</span>
+      </div>
+      <b>${formatNumber(getQuantityToOrder(item))} ${escapeHtml(item.unit)}</b>
+    </article>
+  `).join("");
+
+  return `
+    <section class="notion-master-panel tone-orange">
+      <div class="notion-master-panel-head">
+        <div>
+          <span>Comprar hoje</span>
+          <strong>${escapeHtml(todayOrderDay())}</strong>
+        </div>
+        <button class="text-action" data-notion-master-action="today" type="button">Abrir lista</button>
+      </div>
+      <div class="notion-mini-list">${rows || '<div class="mini-empty">Sem compras para hoje.</div>'}</div>
+    </section>
+  `;
+}
+
+function notionSupplierPurchasesPanel(supplierGroups) {
+  const rows = supplierGroups.slice(0, 7).map((group) => {
+    const preview = group.items.slice(0, 2).map((item) => item.name).join(", ");
+    return `
+      <article class="notion-mini-row">
+        <div>
+          <strong>${escapeHtml(group.supplier)}</strong>
+          <span>${escapeHtml(orderDaySummary(group.items))}${preview ? ` | ${escapeHtml(preview)}` : ""}</span>
+        </div>
+        <b>${formatNumber(group.items.length)}</b>
+      </article>
+    `;
+  }).join("");
+
+  return `
+    <section class="notion-master-panel tone-green">
+      <div class="notion-master-panel-head">
+        <div>
+          <span>Compras por fornecedor</span>
+          <strong>${formatNumber(supplierGroups.length)} grupos</strong>
+        </div>
+        <button class="text-action" data-notion-master-action="purchases" type="button">Ver todos</button>
+      </div>
+      <div class="notion-mini-list">${rows || '<div class="mini-empty">Sem fornecedores com compras sugeridas.</div>'}</div>
+    </section>
+  `;
+}
+
+async function handleNotionMasterAction(event) {
+  const button = event.target.closest("[data-notion-master-action]");
+  if (!button) return;
+  const action = button.dataset.notionMasterAction;
+
+  if (action === "refresh") {
+    await pullFromNotion();
+    renderNotionDashboard();
+    return;
+  }
+
+  if (action === "ruptures") {
+    setManagerView("inventario");
+    elements.statusFilter.value = "low";
+    elements.searchInput.value = "";
+    render();
+    return;
+  }
+
+  if (action === "today" || action === "purchases") {
+    setManagerView("pedidos");
+  }
 }
 
 function handleNotionDivisionAction(event) {
@@ -2132,6 +2287,48 @@ function getPurchaseSuggestions() {
       if (supplierOrder !== 0) return supplierOrder;
       return b.minimum - b.quantity - (a.minimum - a.quantity) || a.name.localeCompare(b.name);
     });
+}
+
+function isRupture(item) {
+  return numberValue(item.quantity) <= 0;
+}
+
+function isPurchaseDueToday(item) {
+  return matchesOrderDay(item.orderDay, todayOrderDay());
+}
+
+function todayOrderDay() {
+  const days = ["Domingo", "Segunda-feira", "Terca-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sabado"];
+  return days[new Date().getDay()];
+}
+
+function matchesOrderDay(value, expectedDay) {
+  const expected = normalizeOrderDayName(expectedDay);
+  return String(value || "")
+    .split(/[,;/]+/)
+    .map(normalizeOrderDayName)
+    .some((day) => day && day === expected);
+}
+
+function normalizeOrderDayName(value) {
+  const normalized = normalizeText(value);
+  if (!normalized) return "";
+  if (normalized.startsWith("seg") || normalized === "2" || normalized === "segunda") return "segunda-feira";
+  if (normalized.startsWith("ter") || normalized === "3" || normalized === "terca") return "terca-feira";
+  if (normalized.startsWith("qua") || normalized === "4" || normalized === "quarta") return "quarta-feira";
+  if (normalized.startsWith("qui") || normalized === "5" || normalized === "quinta") return "quinta-feira";
+  if (normalized.startsWith("sex") || normalized === "6" || normalized === "sexta") return "sexta-feira";
+  if (normalized.startsWith("sab") || normalized === "7" || normalized === "sabado") return "sabado";
+  if (normalized.startsWith("dom") || normalized === "1" || normalized === "domingo") return "domingo";
+  return normalized;
+}
+
+function latestItemUpdateText() {
+  const latest = items
+    .map((item) => new Date(item.updatedAt).getTime())
+    .filter(Number.isFinite)
+    .sort((a, b) => b - a)[0];
+  return latest ? formatDateTime(new Date(latest).toISOString()) : "";
 }
 
 function shouldSuggestPurchase(item) {
