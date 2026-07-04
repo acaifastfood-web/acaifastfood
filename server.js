@@ -12,6 +12,7 @@ const NOTION_TOKEN = process.env.NOTION_TOKEN || "";
 const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || "";
 const NOTION_REVENUE_DATABASE_ID = process.env.NOTION_REVENUE_DATABASE_ID || "";
 const NOTION_INVOICE_DATABASE_ID = process.env.NOTION_INVOICE_DATABASE_ID || "";
+const NOTION_COUNTS_DATABASE_ID = process.env.NOTION_COUNTS_DATABASE_ID || "";
 const NOTION_PURCHASES_VIEW_URL = process.env.NOTION_PURCHASES_VIEW_URL || "";
 const DEFAULT_NOTION_MANAGEMENT_DASHBOARD_URL = "https://app.notion.com/p/Dashboard-Gest-o-397643c289174f3886e28b17f737329d?source=copy_link";
 const NOTION_MANAGEMENT_DASHBOARD_URL = process.env.NOTION_MANAGEMENT_DASHBOARD_URL || DEFAULT_NOTION_MANAGEMENT_DASHBOARD_URL;
@@ -151,6 +152,32 @@ const INVOICE_PROPERTY_ALIASES = {
   file: ["Arquivo", "Ficheiro", "Anexo"],
 };
 
+const COUNT_PROPERTY_NAMES = {
+  title: process.env.NOTION_COUNT_PROPERTY_TITLE || "Contagem",
+  date: process.env.NOTION_COUNT_PROPERTY_DATE || "Data de Contagem",
+  product: process.env.NOTION_COUNT_PROPERTY_PRODUCT || "Produto / Base Mestre",
+  quantity: process.env.NOTION_COUNT_PROPERTY_QUANTITY || "Quantidade Contada",
+  employee: process.env.NOTION_COUNT_PROPERTY_EMPLOYEE || "Funcionário",
+  observation: process.env.NOTION_COUNT_PROPERTY_OBSERVATION || "Observação",
+  sector: process.env.NOTION_COUNT_PROPERTY_SECTOR || "Setor",
+  supplier: process.env.NOTION_COUNT_PROPERTY_SUPPLIER || "Fornecedor",
+  recordId: process.env.NOTION_COUNT_PROPERTY_RECORD_ID || "Registro ID",
+  createdAt: process.env.NOTION_COUNT_PROPERTY_CREATED_AT || "Registado em",
+};
+
+const COUNT_PROPERTY_ALIASES = {
+  title: ["Contagem", "Nome", "Name"],
+  date: ["Data de Contagem", "Data da Contagem", "Data"],
+  product: ["Produto / Base Mestre", "Produto", "Base Mestre"],
+  quantity: ["Quantidade Contada", "Quantidade", "Qtd Contada"],
+  employee: ["Funcionário", "Funcionario", "Responsável", "Responsavel"],
+  observation: ["Observação", "Observacao", "Obs"],
+  sector: ["Setor", "Sector"],
+  supplier: ["Fornecedor"],
+  recordId: ["Registro ID", "Registo ID"],
+  createdAt: ["Registado em", "Registrado em", "Criado em"],
+};
+
 const MIME_TYPES = {
   ".html": "text/html;charset=utf-8",
   ".css": "text/css;charset=utf-8",
@@ -237,11 +264,15 @@ http
       }
 
       if (requestPath === "/api/count-records" && request.method === "GET") {
-        return handleCountRecords(response);
+        return await handleCountRecords(request, response);
       }
 
       if (requestPath === "/api/count-records/item-status" && request.method === "POST") {
         return await handleCountRecordItemStatus(request, response);
+      }
+
+      if (requestPath === "/api/count-records/item-update" && request.method === "POST") {
+        return await handleCountRecordItemUpdate(request, response);
       }
 
       if (requestPath === "/api/revenue-records" && request.method === "GET") {
@@ -332,9 +363,35 @@ async function handleLogout(request, response) {
   return sendJson(response, 200, { ok: true });
 }
 
-function handleCountRecords(response) {
-  const records = readCountRecords().slice(0, 120);
-  return sendJson(response, 200, { records });
+async function handleCountRecords(request, response) {
+  const url = new URL(request.url, `http://localhost:${PORT}`);
+  const filters = {
+    product: normalizeTextKey(url.searchParams.get("product") || ""),
+    employee: normalizeTextKey(url.searchParams.get("employee") || ""),
+    sector: normalizeTextKey(url.searchParams.get("sector") || ""),
+    supplier: normalizeTextKey(url.searchParams.get("supplier") || ""),
+    date: normalizeDate(url.searchParams.get("date") || ""),
+    authToken: url.searchParams.get("authToken") || "",
+  };
+  const session = filters.authToken ? getSession(filters.authToken) : null;
+  const localRecords = readCountRecords();
+  const notionResult = await readNotionCountRecordsSafe();
+  const records = mergeCountRecordSources(localRecords, notionResult.records);
+  let entries = flattenCountRecords(records);
+
+  if (session && normalizeRole(session.role) === "employee") {
+    const username = normalizeTextKey(session.username);
+    entries = entries.filter((entry) => normalizeTextKey(entry.employeeUsername || entry.employeeName).includes(username));
+  }
+
+  entries = filterCountEntries(entries, filters).sort(compareCountEntries);
+
+  return sendJson(response, 200, {
+    records: records.slice(0, 180),
+    entries: entries.slice(0, 1200),
+    source: notionResult.configured ? "notion+local" : "local",
+    notion: notionResult,
+  });
 }
 
 function handleTimeRecords(request, response) {
@@ -411,6 +468,25 @@ async function handleCountRecordItemStatus(request, response) {
   item.requestedAt = requested ? new Date().toISOString() : "";
   writeCountRecords(records);
   return sendJson(response, 200, { records: records.slice(0, 120) });
+}
+
+async function handleCountRecordItemUpdate(request, response) {
+  const body = await readJson(request);
+  const recordId = String(body.recordId || "");
+  const itemId = String(body.itemId || "");
+  const records = readCountRecords();
+  const record = records.find((entry) => entry.id === recordId);
+  if (!record) return sendJson(response, 404, { error: "Registo nao encontrado ou vindo apenas do Notion." });
+  const item = (record.items || []).find((entry) => entry.id === itemId);
+  if (!item) return sendJson(response, 404, { error: "Produto nao encontrado no registo." });
+
+  item.quantity = numberValue(body.quantity);
+  item.observation = String(body.observation || "").trim();
+  item.correctedAt = new Date().toISOString();
+  item.correctedBy = String(body.correctedBy || "Administrador");
+  record.updatedAt = item.correctedAt;
+  writeCountRecords(records);
+  return sendJson(response, 200, { records: records.slice(0, 180), entries: flattenCountRecords(records).sort(compareCountEntries).slice(0, 1200) });
 }
 
 function handleRevenueRecords(response) {
@@ -729,8 +805,11 @@ async function handleNotionSync(request, response) {
       }
     }
 
+    let countSync = null;
     if (countRecord && session) {
-      appendCountRecord(buildCountRecord(countRecord, session));
+      const builtCountRecord = buildCountRecord(countRecord, session);
+      appendCountRecord(builtCountRecord);
+      countSync = await syncCountRecordToNotionSafe(builtCountRecord);
     }
 
     return sendJson(response, 200, {
@@ -738,6 +817,7 @@ async function handleNotionSync(request, response) {
       updated,
       databaseTitle: dataSourceRef.title,
       skippedProperties: Array.from(skippedProperties).sort(),
+      countSync,
     });
   } catch (error) {
     return sendJson(response, 400, { error: friendlyNotionError(error.message) });
@@ -756,15 +836,225 @@ function buildCountRecord(rawRecord, session) {
     itemCount: countedItems.length,
     items: countedItems.slice(0, 300).map((item) => ({
       id: crypto.randomUUID(),
+      itemId: String(item.itemId || item.id || ""),
       name: String(item.name || "Produto sem nome"),
       quantity: numberValue(item.quantity),
       unit: String(item.unit || ""),
       previousQuantity: numberValue(item.previousQuantity),
       expiresAt: String(item.expiresAt || "").slice(0, 10),
+      supplier: String(item.supplier || ""),
+      minimum: numberValue(item.minimum),
+      dailyMinimum: numberValue(item.dailyMinimum),
+      controlType: String(item.controlType || ""),
+      observation: String(item.observation || ""),
+      lowStock: item.lowStock === true,
       requested: false,
       requestedAt: "",
     })),
   };
+}
+
+async function readNotionCountRecordsSafe() {
+  try {
+    const dataSourceRef = await resolveCountDataSourceRef();
+    if (!dataSourceRef) return { configured: false, records: [], message: "Base Notion Contagens Diárias não configurada." };
+    const properties = dataSourceRef.dataSource.properties || {};
+    const titleProperty = findCountTitleProperty(properties);
+    const pages = await queryDataSourcePages(dataSourceRef.id);
+    const records = pages.map((page) => pageToCountRecord(page, properties, titleProperty?.name)).filter(Boolean);
+    return { configured: true, synced: true, records, databaseTitle: dataSourceRef.title };
+  } catch (error) {
+    return { configured: true, synced: false, records: [], error: friendlyNotionError(error.message) };
+  }
+}
+
+async function syncCountRecordToNotionSafe(record) {
+  try {
+    const dataSourceRef = await resolveCountDataSourceRef();
+    if (!dataSourceRef) return { configured: false, synced: false, message: "Base Notion Contagens Diárias não configurada." };
+    const properties = dataSourceRef.dataSource.properties || {};
+    const titleProperty = findCountTitleProperty(properties);
+    if (!titleProperty) return { configured: true, synced: false, error: "A base Contagens Diárias precisa de uma propriedade de título." };
+
+    let created = 0;
+    for (const item of record.items || []) {
+      const notionProperties = buildCountNotionProperties(record, item, properties, titleProperty.name);
+      await notionRequest("/pages", {
+        method: "POST",
+        body: {
+          parent: { data_source_id: dataSourceRef.id },
+          properties: notionProperties,
+        },
+      });
+      created += 1;
+    }
+    return { configured: true, synced: true, created, databaseTitle: dataSourceRef.title };
+  } catch (error) {
+    return { configured: true, synced: false, error: friendlyNotionError(error.message) };
+  }
+}
+
+async function resolveCountDataSourceRef() {
+  const configuredId = String(NOTION_COUNTS_DATABASE_ID || "").trim();
+  if (isUsableNotionId(configuredId)) return resolveDataSource(configuredId);
+  if (!NOTION_TOKEN) return null;
+
+  const databases = await searchDatabases();
+  const exactMatch = databases.find((database) => {
+    const title = normalizeTextKey(database.title);
+    return title === "contagens diarias" || title === "contagens diárias";
+  });
+  const likelyMatch = exactMatch || databases.find((database) => normalizeTextKey(database.title).includes("contagen"));
+  return likelyMatch ? resolveDataSource(likelyMatch.id) : null;
+}
+
+function findCountTitleProperty(properties) {
+  const configured = properties[COUNT_PROPERTY_NAMES.title];
+  if (configured?.type === "title") return { name: COUNT_PROPERTY_NAMES.title, property: configured };
+  return findTitleProperty(properties);
+}
+
+function buildCountNotionProperties(record, item, databaseProperties, titlePropertyName) {
+  const values = {};
+  setCountPropertyValue(values, databaseProperties, "date", record.countDate);
+  setCountPropertyValue(values, databaseProperties, "product", { name: item.name, pageId: item.itemId });
+  setCountPropertyValue(values, databaseProperties, "quantity", item.quantity);
+  setCountPropertyValue(values, databaseProperties, "employee", record.employeeName || record.employeeUsername);
+  setCountPropertyValue(values, databaseProperties, "observation", item.observation || "");
+  setCountPropertyValue(values, databaseProperties, "sector", record.employeeSector);
+  setCountPropertyValue(values, databaseProperties, "supplier", item.supplier || "");
+  setCountPropertyValue(values, databaseProperties, "recordId", `${record.id}:${item.id}`);
+  setCountPropertyValue(values, databaseProperties, "createdAt", record.createdAt);
+  values[titlePropertyName] = countEntryTitle(record, item);
+
+  const notionProperties = {};
+  for (const [propertyName, value] of Object.entries(values)) {
+    const property = databaseProperties[propertyName];
+    if (!property) continue;
+    const serialized = serializeCountProperty(property, value);
+    if (serialized) notionProperties[propertyName] = serialized;
+  }
+  return notionProperties;
+}
+
+function setCountPropertyValue(values, databaseProperties, key, value) {
+  values[countPropertyName(key, databaseProperties)] = value;
+}
+
+function countPropertyName(key, properties) {
+  const candidates = [COUNT_PROPERTY_NAMES[key], ...(COUNT_PROPERTY_ALIASES[key] || [])].filter(Boolean);
+  return candidates.find((name) => properties[name]) || COUNT_PROPERTY_NAMES[key];
+}
+
+function serializeCountProperty(property, value) {
+  const type = typeof property === "string" ? property : property?.type;
+  if (type === "relation") {
+    const pageId = typeof value === "object" ? String(value.pageId || "") : "";
+    return isUsableNotionId(pageId) ? { relation: [{ id: pageId }] } : { relation: [] };
+  }
+  const textValue = typeof value === "object" ? value.name || "" : value;
+  return serializeProperty(type, textValue);
+}
+
+function pageToCountRecord(page, properties, titlePropertyName) {
+  const pageProperties = page.properties || {};
+  const getProperty = (key) => pageProperties[countPropertyName(key, pageProperties)];
+  const title = titlePropertyName ? propertyText(pageProperties[titlePropertyName]) : "";
+  const recordId = propertyText(getProperty("recordId")) || page.id;
+  const [parentRecordId, itemId] = String(recordId).split(":");
+  const item = {
+    id: itemId || page.id,
+    notionPageId: page.id,
+    itemId: relationFirstId(getProperty("product")),
+    name: propertyText(getProperty("product")) || title || "Produto sem nome",
+    quantity: propertyNumber(getProperty("quantity")),
+    unit: "",
+    previousQuantity: 0,
+    expiresAt: "",
+    supplier: propertyText(getProperty("supplier")),
+    observation: propertyText(getProperty("observation")),
+    requested: false,
+    requestedAt: "",
+  };
+  return {
+    id: parentRecordId || page.id,
+    source: "notion",
+    notionPageId: page.id,
+    createdAt: propertyDate(getProperty("createdAt")) || page.created_time || page.last_edited_time || new Date().toISOString(),
+    countDate: propertyDate(getProperty("date")) || String(page.created_time || "").slice(0, 10),
+    employeeName: propertyText(getProperty("employee")),
+    employeeUsername: "",
+    employeeSector: propertyText(getProperty("sector")),
+    itemCount: 1,
+    items: [item],
+  };
+}
+
+function relationFirstId(property) {
+  if (!property || property.type !== "relation") return "";
+  return property.relation?.[0]?.id || "";
+}
+
+function countEntryTitle(record, item) {
+  return `${record.countDate || todayDateText()} - ${item.name || "Produto"} - ${record.employeeName || record.employeeUsername || "Funcionario"}`;
+}
+
+function mergeCountRecordSources(localRecords, notionRecords) {
+  const records = [...localRecords];
+  const existingKeys = new Set(flattenCountRecords(records).map(countEntryKey));
+  for (const record of notionRecords || []) {
+    const isDuplicate = flattenCountRecords([record]).some((entry) => existingKeys.has(countEntryKey(entry)));
+    if (!isDuplicate) records.push(record);
+  }
+  return records.sort((a, b) => String(b.countDate || "").localeCompare(String(a.countDate || "")) || String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+}
+
+function flattenCountRecords(records) {
+  const entries = [];
+  for (const record of records || []) {
+    for (const item of record.items || []) {
+      entries.push({
+        id: `${record.id}:${item.id}`,
+        recordId: record.id,
+        itemRecordId: item.id,
+        notionPageId: item.notionPageId || record.notionPageId || "",
+        source: record.source || "local",
+        countDate: record.countDate || "",
+        createdAt: record.createdAt || "",
+        productId: item.itemId || "",
+        productName: item.name || "Produto sem nome",
+        quantity: numberValue(item.quantity),
+        unit: item.unit || "",
+        employeeName: record.employeeName || record.employeeUsername || "",
+        employeeUsername: record.employeeUsername || "",
+        observation: item.observation || "",
+        sector: record.employeeSector || "",
+        supplier: item.supplier || "",
+        requested: item.requested === true,
+        expiresAt: item.expiresAt || "",
+      });
+    }
+  }
+  return entries;
+}
+
+function filterCountEntries(entries, filters) {
+  return entries.filter((entry) => {
+    if (filters.date && entry.countDate !== filters.date) return false;
+    if (filters.product && !normalizeTextKey(entry.productName).includes(filters.product)) return false;
+    if (filters.employee && !normalizeTextKey(`${entry.employeeName} ${entry.employeeUsername}`).includes(filters.employee)) return false;
+    if (filters.sector && !normalizeTextKey(entry.sector).includes(filters.sector)) return false;
+    if (filters.supplier && !normalizeTextKey(entry.supplier).includes(filters.supplier)) return false;
+    return true;
+  });
+}
+
+function compareCountEntries(a, b) {
+  return String(b.countDate || "").localeCompare(String(a.countDate || "")) || String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+}
+
+function countEntryKey(entry) {
+  return [entry.countDate, normalizeTextKey(entry.productName), entry.quantity, normalizeTextKey(entry.employeeName), normalizeTextKey(entry.supplier)].join("|");
 }
 
 function normalizeRevenueRecord(rawRecord) {
@@ -2221,7 +2511,8 @@ function normalizeSector(value) {
 
 function normalizeRole(value) {
   const normalized = normalizeTextKey(value);
-  return normalized === "manager" || normalized.startsWith("gest") || normalized.startsWith("admin") ? "manager" : "employee";
+  if (normalized === "admin" || normalized.startsWith("admin")) return "admin";
+  return normalized === "manager" || normalized.startsWith("gest") ? "manager" : "employee";
 }
 
 function setUserPassword(user, password) {
@@ -2306,6 +2597,18 @@ function readCountRecords() {
         if (!("expiresAt" in item)) {
           item.expiresAt = "";
           changed = true;
+        }
+        for (const key of ["itemId", "supplier", "controlType", "observation", "correctedAt", "correctedBy"]) {
+          if (!(key in item)) {
+            item[key] = "";
+            changed = true;
+          }
+        }
+        for (const key of ["minimum", "dailyMinimum"]) {
+          if (!(key in item)) {
+            item[key] = 0;
+            changed = true;
+          }
         }
       }
     }

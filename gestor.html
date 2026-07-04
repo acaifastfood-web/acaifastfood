@@ -56,7 +56,7 @@
           <button class="sidebar-button" data-view-target="ponto" type="button">Ponto</button>
           <button class="sidebar-button" data-view-target="inventario" type="button">Inventario</button>
           <button class="sidebar-button" data-view-target="movimentos" type="button">Movimentos</button>
-          <button class="sidebar-button" data-view-target="registos" type="button">Estoque atualizado</button>
+          <button class="sidebar-button" data-view-target="registos" type="button">Histórico Contagens</button>
           <button class="sidebar-button" data-view-target="atividades" type="button">Atividades</button>
           <button class="sidebar-button" data-view-target="notion" type="button">Notion Gestão</button>
         </aside>
@@ -372,6 +372,7 @@
             <select id="userRole" name="role" required>
               <option value="employee">Funcionario</option>
               <option value="manager">Gestor - acesso total</option>
+              <option value="admin">Administrador</option>
             </select>
           </label>
           <label>
@@ -608,11 +609,48 @@
       <section class="panel count-record-panel manager-view" data-view="registos" hidden>
         <div class="panel-heading">
           <div>
-            <h2>Estoque geral atualizado</h2>
-            <p class="panel-subtitle">Histórico das contagens enviadas pelo app do funcionário.</p>
+            <h2>Histórico de Contagens</h2>
+            <p class="panel-subtitle">Lançamentos feitos pelos funcionários, com filtros e histórico por produto.</p>
           </div>
-          <button class="button ghost" id="refreshCountRecordsButton" type="button">Atualizar estoque</button>
+          <div class="row-actions">
+            <select id="countHistoryMode" aria-label="Perfil do histórico">
+              <option value="manager">Gestor</option>
+              <option value="employee">Funcionário</option>
+              <option value="admin">Administrador</option>
+            </select>
+            <button class="button ghost" id="refreshCountRecordsButton" type="button">Atualizar histórico</button>
+          </div>
         </div>
+        <div class="count-history-filters">
+          <label>
+            Produto
+            <input id="countFilterProduct" type="search" placeholder="Produto ou Base Mestre" />
+          </label>
+          <label>
+            Funcionário
+            <input id="countFilterEmployee" type="search" placeholder="Nome do funcionário" />
+          </label>
+          <label>
+            Setor
+            <select id="countFilterSector">
+              <option value="">Todos</option>
+              <option value="Sala">Sala</option>
+              <option value="Cozinha">Cozinha</option>
+              <option value="Gestao">Gestão</option>
+            </select>
+          </label>
+          <label>
+            Fornecedor
+            <input id="countFilterSupplier" type="search" placeholder="Fornecedor" />
+          </label>
+          <label>
+            Data
+            <input id="countFilterDate" type="date" />
+          </label>
+          <button class="button ghost" id="clearCountFiltersButton" type="button">Limpar filtros</button>
+        </div>
+        <div class="count-history-summary" id="countHistorySummary"></div>
+        <div class="count-product-history" id="countProductHistory" hidden></div>
         <div id="countRecordList" class="count-record-list"></div>
       </section>
 

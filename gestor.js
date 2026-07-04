@@ -141,6 +141,8 @@ let countRecords = [];
 let revenueRecords = [];
 let invoiceRecords = [];
 let timeRecords = [];
+let countHistoryEntries = [];
+let selectedCountProduct = "";
 let activities = load(ACTIVITIES_KEY, []).map(normalizeActivity);
 let appLinks = {};
 
@@ -259,6 +261,15 @@ const elements = {
   clearMovementsButton: document.querySelector("#clearMovementsButton"),
   refreshCountRecordsButton: document.querySelector("#refreshCountRecordsButton"),
   countRecordList: document.querySelector("#countRecordList"),
+  countHistoryMode: document.querySelector("#countHistoryMode"),
+  countFilterProduct: document.querySelector("#countFilterProduct"),
+  countFilterEmployee: document.querySelector("#countFilterEmployee"),
+  countFilterSector: document.querySelector("#countFilterSector"),
+  countFilterSupplier: document.querySelector("#countFilterSupplier"),
+  countFilterDate: document.querySelector("#countFilterDate"),
+  clearCountFiltersButton: document.querySelector("#clearCountFiltersButton"),
+  countHistorySummary: document.querySelector("#countHistorySummary"),
+  countProductHistory: document.querySelector("#countProductHistory"),
   activityForm: document.querySelector("#activityForm"),
   activityId: document.querySelector("#activityId"),
   activityTitle: document.querySelector("#activityTitle"),
@@ -325,6 +336,13 @@ elements.exportButton.addEventListener("click", exportData);
 elements.importFile.addEventListener("change", importData);
 elements.clearMovementsButton.addEventListener("click", clearMovements);
 elements.refreshCountRecordsButton.addEventListener("click", fetchCountRecords);
+elements.countHistoryMode.addEventListener("change", renderCountHistory);
+elements.countFilterProduct.addEventListener("input", renderCountHistory);
+elements.countFilterEmployee.addEventListener("input", renderCountHistory);
+elements.countFilterSector.addEventListener("change", renderCountHistory);
+elements.countFilterSupplier.addEventListener("input", renderCountHistory);
+elements.countFilterDate.addEventListener("change", renderCountHistory);
+elements.clearCountFiltersButton.addEventListener("click", clearCountHistoryFilters);
 elements.countRecordList.addEventListener("change", handleCountRecordChange);
 elements.countRecordList.addEventListener("click", handleCountRecordClick);
 elements.activityForm.addEventListener("submit", saveActivity);
@@ -556,6 +574,7 @@ function renderManagerDashboard() {
     { iconName: "check", label: "Ponto", tone: "blue", action: "ponto" },
     { iconName: "orders", label: "Funcionários e senhas", tone: "orange", action: "funcionarios" },
     { iconName: "sales", label: "Registro financeiro", tone: "purple", action: "relatorio" },
+    { iconName: "movement", label: "Histórico Contagens", tone: "blue", action: "registos" },
     { iconName: "orders", label: "Lista de Atividades", tone: "green", action: "atividades" },
     { iconName: "notion", label: "Dashboard Notion", tone: "purple", action: "notion" },
   ].forEach((button) => elements.managerQuickActions.appendChild(AcaiUI.QuickActionButton(button)));
@@ -607,6 +626,7 @@ function handleManagerDashboardAction(event) {
   if (action === "ponto") return setManagerView("ponto");
   if (action === "notion") return setManagerView("notion");
   if (action === "funcionarios") return setManagerView("funcionarios");
+  if (action === "registos") return setManagerView("registos");
   if (action === "producao" || action === "movimentos") return setManagerView("movimentos");
   if (action === "pedidos") return setManagerView("pedidos");
   if (action === "consulta") {
@@ -1608,7 +1628,7 @@ function renderUsers(users) {
         </div>
         <div>
           <strong>${escapeHtml(user.sector)}</strong>
-          <span>${user.role === "manager" ? "Gestor - acesso total" : "Funcionario"}</span>
+          <span>${escapeHtml(userRoleLabel(user.role))}</span>
         </div>
         <span class="status-pill ${user.active ? "status-ok" : "status-low"}">${user.active ? "Ativo" : "Pausado"}</span>
         <div class="row-actions">
@@ -1624,6 +1644,12 @@ function renderUsers(users) {
 
     elements.userList.appendChild(section);
   }
+}
+
+function userRoleLabel(role) {
+  if (role === "admin") return "Administrador";
+  if (role === "manager") return "Gestor - acesso total";
+  return "Funcionario";
 }
 
 async function fetchTimeRecords() {
@@ -1933,41 +1959,134 @@ function renderMovements() {
 }
 
 async function fetchCountRecords() {
-  elements.countRecordList.innerHTML = '<div class="empty-state"><h3>A carregar estoque atualizado</h3></div>';
+  elements.countRecordList.innerHTML = '<div class="empty-state"><h3>A carregar histórico de contagens</h3></div>';
 
   try {
     const response = await fetch("/api/count-records");
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "Falha ao carregar estoque atualizado.");
+    if (!response.ok) throw new Error(result.error || "Falha ao carregar histórico de contagens.");
     countRecords = result.records || [];
-    renderCountRecords(countRecords);
+    countHistoryEntries = Array.isArray(result.entries) ? result.entries : flattenClientCountRecords(countRecords);
+    renderCountHistory();
   } catch (error) {
-    elements.countRecordList.innerHTML = `<div class="empty-state"><h3>Sem estoque atualizado</h3><p>${escapeHtml(error.message || "Nao foi possivel carregar o historico.")}</p></div>`;
+    elements.countRecordList.innerHTML = `<div class="empty-state"><h3>Sem histórico</h3><p>${escapeHtml(error.message || "Nao foi possivel carregar o historico.")}</p></div>`;
   }
 }
 
-function renderCountRecords(records) {
-  elements.countRecordList.innerHTML = "";
-  if (records.length === 0) {
-    elements.countRecordList.innerHTML = '<div class="empty-state"><h3>Sem estoque atualizado</h3><p>Quando um funcionario guardar contagens, o historico aparece aqui.</p></div>';
+function renderCountHistory() {
+  const entries = getFilteredCountHistory();
+  renderCountHistorySummary(entries);
+  renderCountProductHistory(entries);
+  renderCountRecords(entries);
+}
+
+function getFilteredCountHistory() {
+  const product = normalizeText(elements.countFilterProduct.value);
+  const employee = normalizeText(elements.countFilterEmployee.value);
+  const sector = normalizeText(elements.countFilterSector.value);
+  const supplier = normalizeText(elements.countFilterSupplier.value);
+  const date = elements.countFilterDate.value;
+  const mode = elements.countHistoryMode.value;
+  if (mode === "employee" && !employee) return [];
+
+  return countHistoryEntries
+    .filter((entry) => !date || entry.countDate === date)
+    .filter((entry) => !product || normalizeText(entry.productName).includes(product))
+    .filter((entry) => !employee || normalizeText(`${entry.employeeName} ${entry.employeeUsername}`).includes(employee))
+    .filter((entry) => !sector || normalizeText(entry.sector).includes(sector))
+    .filter((entry) => !supplier || normalizeText(entry.supplier).includes(supplier))
+    .filter((entry) => mode !== "employee" || normalizeText(`${entry.employeeName} ${entry.employeeUsername}`).includes(employee))
+    .sort((a, b) => String(b.countDate || "").localeCompare(String(a.countDate || "")) || String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+}
+
+function renderCountHistorySummary(entries) {
+  const latest = entries[0];
+  const products = new Set(entries.map((entry) => entry.productName)).size;
+  const employees = new Set(entries.map((entry) => entry.employeeName || entry.employeeUsername).filter(Boolean)).size;
+  elements.countHistorySummary.innerHTML = `
+    <article>
+      <span>Registos</span>
+      <strong>${formatNumber(entries.length)}</strong>
+    </article>
+    <article>
+      <span>Produtos</span>
+      <strong>${formatNumber(products)}</strong>
+    </article>
+    <article>
+      <span>Funcionários</span>
+      <strong>${formatNumber(employees)}</strong>
+    </article>
+    <article>
+      <span>Última contagem</span>
+      <strong>${latest ? formatDate(latest.countDate) : "-"}</strong>
+      <small>${latest ? escapeHtml(latest.employeeName || latest.employeeUsername || "Sem responsável") : ""}</small>
+    </article>
+  `;
+}
+
+function renderCountProductHistory(entries) {
+  if (!selectedCountProduct) {
+    elements.countProductHistory.hidden = true;
+    elements.countProductHistory.innerHTML = "";
     return;
   }
 
-  for (const record of records.slice(0, 60)) {
+  const productEntries = countHistoryEntries
+    .filter((entry) => entry.productName === selectedCountProduct)
+    .sort((a, b) => String(b.countDate || "").localeCompare(String(a.countDate || "")) || String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+  const latest = productEntries[0];
+  elements.countProductHistory.hidden = false;
+  elements.countProductHistory.innerHTML = `
+    <div class="count-product-history-head">
+      <div>
+        <span>Histórico do produto</span>
+        <strong>${escapeHtml(selectedCountProduct)}</strong>
+        <small>Último responsável: ${escapeHtml(latest?.employeeName || latest?.employeeUsername || "-")} | Última quantidade: ${latest ? `${formatNumber(latest.quantity)} ${escapeHtml(latest.unit)}` : "-"}</small>
+      </div>
+      <button class="button ghost" data-action="close-product-history" type="button">Fechar</button>
+    </div>
+    <div class="count-product-history-list">
+      ${productEntries.slice(0, 12).map((entry) => `
+        <article>
+          <strong>${formatDate(entry.countDate)} - ${formatNumber(entry.quantity)} ${escapeHtml(entry.unit)}</strong>
+          <span>${escapeHtml(entry.employeeName || entry.employeeUsername || "Sem responsável")} | ${escapeHtml(entry.sector || "Sem setor")} | ${escapeHtml(entry.supplier || "Sem fornecedor")}</span>
+          ${entry.observation ? `<p>${escapeHtml(entry.observation)}</p>` : ""}
+        </article>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderCountRecords(entries) {
+  elements.countRecordList.innerHTML = "";
+  if (entries.length === 0) {
+    elements.countRecordList.innerHTML = '<div class="empty-state"><h3>Sem contagens</h3><p>Quando um funcionario guardar contagens, o historico aparece aqui.</p></div>';
+    return;
+  }
+
+  const isAdmin = elements.countHistoryMode.value === "admin";
+  for (const record of groupCountEntries(entries).slice(0, 80)) {
     const entry = document.createElement("article");
     entry.className = "count-record";
-    const items = Array.isArray(record.items) ? record.items : [];
+    const items = record.items;
     const requestedCount = items.filter((item) => item.requested).length;
     const itemRows = items
       .map(
         (item) => `
-          <label class="count-record-item${item.requested ? " requested" : ""}">
-            <input data-record-id="${escapeHtml(record.id)}" data-record-item-id="${escapeHtml(item.id)}" type="checkbox" ${item.requested ? "checked" : ""} />
+          <div class="count-record-item${item.requested ? " requested" : ""}">
+            <input data-record-id="${escapeHtml(item.recordId)}" data-record-item-id="${escapeHtml(item.itemRecordId)}" type="checkbox" ${item.requested ? "checked" : ""} ${item.source === "notion" ? "disabled" : ""} />
             <span>
-              <strong>${escapeHtml(item.name)}</strong>
-              <small>${formatNumber(item.quantity)} ${escapeHtml(item.unit)}${item.expiresAt ? ` | validade ${formatDate(item.expiresAt)}` : ""}${item.requested ? " | solicitado" : ""}</small>
+              <button class="link-button" data-action="show-product-history" data-product="${escapeHtml(item.productName)}" type="button">${escapeHtml(item.productName)}</button>
+              <small>${formatNumber(item.quantity)} ${escapeHtml(item.unit)} | ${escapeHtml(item.supplier || "Sem fornecedor")}${item.observation ? ` | ${escapeHtml(item.observation)}` : ""}${item.requested ? " | solicitado" : ""}</small>
             </span>
-          </label>
+            ${isAdmin && item.source !== "notion" ? `
+              <div class="count-record-admin">
+                <input data-edit-quantity="${escapeHtml(item.id)}" type="number" min="0" step="1" value="${escapeHtml(item.quantity)}" />
+                <input data-edit-observation="${escapeHtml(item.id)}" type="text" value="${escapeHtml(item.observation || "")}" placeholder="Observação" />
+                <button class="button ghost" data-action="save-count-correction" data-entry-id="${escapeHtml(item.id)}" type="button">Corrigir</button>
+              </div>
+            ` : ""}
+          </div>
         `,
       )
       .join("");
@@ -1975,7 +2094,7 @@ function renderCountRecords(records) {
       <div class="count-record-head">
         <div>
           <strong>${escapeHtml(record.employeeName || record.employeeUsername || "Funcionario")}</strong>
-          <span>${escapeHtml(record.employeeSector || "Sem setor")} | ${formatDate(record.countDate)} | ${formatDateTime(record.createdAt)}</span>
+          <span>${escapeHtml(record.sector || "Sem setor")} | ${formatDate(record.countDate)} | ${formatDateTime(record.createdAt)}</span>
         </div>
         <button class="button ghost" data-action="share-count-record" data-record-id="${escapeHtml(record.id)}" type="button">Abrir no Notas</button>
       </div>
@@ -1995,9 +2114,26 @@ async function handleCountRecordChange(event) {
 }
 
 function handleCountRecordClick(event) {
-  const button = event.target.closest("button[data-action='share-count-record']");
-  if (!button) return;
-  shareCountRecordToNotes(button.dataset.recordId);
+  const productButton = event.target.closest("button[data-action='show-product-history']");
+  if (productButton) {
+    selectedCountProduct = productButton.dataset.product || "";
+    renderCountHistory();
+    elements.countProductHistory.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  const closeButton = event.target.closest("button[data-action='close-product-history']");
+  if (closeButton) {
+    selectedCountProduct = "";
+    renderCountHistory();
+    return;
+  }
+
+  const correctionButton = event.target.closest("button[data-action='save-count-correction']");
+  if (correctionButton) return saveCountCorrection(correctionButton.dataset.entryId);
+
+  const shareButton = event.target.closest("button[data-action='share-count-record']");
+  if (shareButton) shareCountRecordToNotes(shareButton.dataset.recordId);
 }
 
 async function updateCountRecordItemStatus(recordId, itemId, requested) {
@@ -2010,15 +2146,123 @@ async function updateCountRecordItemStatus(recordId, itemId, requested) {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Falha ao atualizar produto.");
     countRecords = result.records || [];
-    renderCountRecords(countRecords);
+    countHistoryEntries = flattenClientCountRecords(countRecords);
+    renderCountHistory();
   } catch (error) {
     setSyncStatus(error.message || "Nao foi possivel marcar como solicitado.", "error");
     fetchCountRecords();
   }
 }
 
+async function saveCountCorrection(entryId) {
+  const entry = countHistoryEntries.find((item) => item.id === entryId);
+  if (!entry) return;
+  const quantityInput = elements.countRecordList.querySelector(`[data-edit-quantity="${cssEscape(entryId)}"]`);
+  const observationInput = elements.countRecordList.querySelector(`[data-edit-observation="${cssEscape(entryId)}"]`);
+
+  try {
+    const response = await fetch("/api/count-records/item-update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recordId: entry.recordId,
+        itemId: entry.itemRecordId,
+        quantity: quantityInput?.value || entry.quantity,
+        observation: observationInput?.value || "",
+        correctedBy: "Administrador",
+      }),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Falha ao corrigir contagem.");
+    countRecords = result.records || [];
+    countHistoryEntries = Array.isArray(result.entries) ? result.entries : flattenClientCountRecords(countRecords);
+    setSyncStatus("Contagem corrigida pelo perfil administrador.", "success");
+    renderCountHistory();
+  } catch (error) {
+    setSyncStatus(error.message || "Nao foi possivel corrigir a contagem.", "error");
+  }
+}
+
+function clearCountHistoryFilters() {
+  elements.countFilterProduct.value = "";
+  elements.countFilterEmployee.value = "";
+  elements.countFilterSector.value = "";
+  elements.countFilterSupplier.value = "";
+  elements.countFilterDate.value = "";
+  selectedCountProduct = "";
+  renderCountHistory();
+}
+
+function flattenClientCountRecords(records) {
+  return (records || []).flatMap((record) =>
+    (record.items || []).map((item) => ({
+      id: `${record.id}:${item.id}`,
+      recordId: record.id,
+      itemRecordId: item.id,
+      source: record.source || "local",
+      countDate: record.countDate || "",
+      createdAt: record.createdAt || "",
+      productId: item.itemId || "",
+      productName: item.name || "Produto sem nome",
+      quantity: numberValue(item.quantity),
+      unit: item.unit || "",
+      employeeName: record.employeeName || record.employeeUsername || "",
+      employeeUsername: record.employeeUsername || "",
+      observation: item.observation || "",
+      sector: record.employeeSector || record.sector || "",
+      supplier: item.supplier || "",
+      requested: item.requested === true,
+      expiresAt: item.expiresAt || "",
+    })),
+  );
+}
+
+function groupCountEntries(entries) {
+  const groups = new Map();
+  for (const entry of entries) {
+    const key = [entry.recordId, entry.countDate, entry.employeeName, entry.createdAt].join("|");
+    if (!groups.has(key)) {
+      groups.set(key, {
+        id: entry.recordId,
+        countDate: entry.countDate,
+        createdAt: entry.createdAt,
+        employeeName: entry.employeeName,
+        employeeUsername: entry.employeeUsername,
+        sector: entry.sector,
+        items: [],
+      });
+    }
+    groups.get(key).items.push(entry);
+  }
+  return [...groups.values()];
+}
+
+function cssEscape(value) {
+  if (window.CSS?.escape) return CSS.escape(String(value));
+  return String(value).replace(/"/g, '\\"');
+}
+
 async function shareCountRecordToNotes(recordId) {
-  const record = countRecords.find((entry) => entry.id === recordId);
+  let record = countRecords.find((entry) => entry.id === recordId);
+  if (!record) {
+    const group = groupCountEntries(countHistoryEntries).find((entry) => entry.id === recordId);
+    if (group) {
+      record = {
+        id: group.id,
+        countDate: group.countDate,
+        createdAt: group.createdAt,
+        employeeName: group.employeeName,
+        employeeSector: group.sector,
+        items: group.items.map((item) => ({
+          name: item.productName,
+          quantity: item.quantity,
+          unit: item.unit,
+          requested: item.requested,
+          expiresAt: item.expiresAt,
+        })),
+      };
+    }
+  }
   if (!record) return;
   const text = buildCountRecordNoteText(record);
 

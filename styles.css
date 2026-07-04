@@ -2033,6 +2033,96 @@ td span {
   gap: 10px;
 }
 
+.count-history-filters {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr)) auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.count-history-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.count-history-summary article,
+.count-product-history {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 14px;
+}
+
+.count-history-summary span,
+.count-product-history span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.count-history-summary strong,
+.count-product-history strong {
+  display: block;
+  margin-top: 5px;
+}
+
+.count-history-summary small,
+.count-product-history small,
+.count-product-history p {
+  color: var(--muted);
+}
+
+.count-product-history {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.count-product-history-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.count-product-history-list {
+  display: grid;
+  gap: 8px;
+}
+
+.count-product-history-list article {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.count-product-history-list article:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.link-button {
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 900;
+  padding: 0;
+  text-align: left;
+}
+
+.count-record-admin {
+  display: grid;
+  grid-template-columns: 88px minmax(140px, 1fr) auto;
+  gap: 8px;
+  grid-column: 1 / -1;
+  margin-top: 8px;
+}
+
 .count-record {
   display: grid;
   gap: 12px;
@@ -2088,7 +2178,7 @@ td span {
   background: #eef8f2;
 }
 
-.count-record-item input {
+.count-record-item > input[type="checkbox"] {
   width: 18px;
   min-height: 18px;
 }
@@ -2490,7 +2580,7 @@ dialog::backdrop {
 
 .count-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) 92px minmax(190px, 240px) 180px;
+  grid-template-columns: minmax(220px, 1fr) 84px minmax(180px, 220px) 130px minmax(160px, 220px);
   gap: 14px;
   align-items: center;
   border-bottom: 1px solid var(--line);
@@ -2499,7 +2589,7 @@ dialog::backdrop {
 }
 
 .count-row.has-expiry-field {
-  grid-template-columns: minmax(220px, 1fr) 92px minmax(190px, 240px) 180px 150px;
+  grid-template-columns: minmax(220px, 1fr) 84px minmax(180px, 220px) 130px minmax(160px, 220px) 150px;
 }
 
 .count-row:last-child {
@@ -2701,6 +2791,8 @@ dialog::backdrop {
   .expense-grid,
   .revenue-totals,
   .revenue-record,
+  .count-history-filters,
+  .count-history-summary,
   .purchase-row,
   .supplier-heading,
   .purchase-heading,
@@ -2717,6 +2809,7 @@ dialog::backdrop {
   .purchase-heading,
   .notion-master-panel-head,
   .count-record-head,
+  .count-product-history-head,
   .purchase-summary {
     align-items: flex-start;
     flex-direction: column;
@@ -2754,7 +2847,8 @@ dialog::backdrop {
   .time-record-row,
   .activity-row,
   .count-record-items,
-  .count-record {
+  .count-record,
+  .count-record-admin {
     grid-template-columns: 1fr;
   }
 

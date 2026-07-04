@@ -448,6 +448,10 @@ function renderCountList() {
           Contagem
           <input data-count-id="${escapeHtml(item.id)}" type="number" inputmode="numeric" min="0" step="1" placeholder="${formatNumber(item.quantity)}" />
         </label>
+        <label class="count-input count-note">
+          Observação
+          <input data-note-id="${escapeHtml(item.id)}" type="text" placeholder="Opcional" />
+        </label>
         ${expiryField}
       `;
       rows.appendChild(row);
@@ -732,15 +736,17 @@ async function saveDailyCounts() {
 
   const inputs = [...elements.countList.querySelectorAll("[data-count-id]")];
   const expiryInputs = [...elements.countList.querySelectorAll("[data-expiry-id]")];
+  const noteInputs = [...elements.countList.querySelectorAll("[data-note-id]")];
   const countDate = elements.countDate.value || todayText;
   const updates = inputs
     .map((input) => ({
       input,
       expiryInput: expiryInputs.find((entry) => entry.dataset.expiryId === input.dataset.countId),
+      noteInput: noteInputs.find((entry) => entry.dataset.noteId === input.dataset.countId),
       item: items.find((entry) => entry.id === input.dataset.countId),
       value: input.value.trim(),
     }))
-    .filter((entry) => entry.item && (entry.value !== "" || getExpiryValue(entry.expiryInput) !== entry.item.expiresAt));
+    .filter((entry) => entry.item && (entry.value !== "" || getExpiryValue(entry.expiryInput) !== entry.item.expiresAt || getNoteValue(entry.noteInput)));
 
   if (updates.length === 0) {
     setSyncStatus("Nenhuma alteracao preenchida.", "warning");
@@ -753,8 +759,10 @@ async function saveDailyCounts() {
     const counted = hasCount ? wholeQuantity(update.value) : update.item.quantity;
     const previous = update.item.quantity;
     const expiresAt = getExpiryValue(update.expiryInput);
+    const observation = getNoteValue(update.noteInput);
     const nextItem = { ...update.item, quantity: counted };
     countedItems.push({
+      itemId: update.item.id,
       name: update.item.name,
       quantity: counted,
       previousQuantity: previous,
@@ -764,12 +772,14 @@ async function saveDailyCounts() {
       minimum: update.item.minimum,
       dailyMinimum: update.item.dailyMinimum,
       controlType: update.item.controlType,
+      observation,
       lowStock: isLowStock(nextItem),
     });
     update.item.quantity = counted;
     update.item.expiresAt = expiresAt;
     update.item.updatedAt = new Date().toISOString();
     update.input.value = "";
+    if (update.noteInput) update.noteInput.value = "";
     movements.unshift({
       id: crypto.randomUUID(),
       itemId: update.item.id,
@@ -887,6 +897,10 @@ function needsExpiryDate(item) {
 
 function getExpiryValue(input) {
   return input?.value ? input.value.slice(0, 10) : "";
+}
+
+function getNoteValue(input) {
+  return input ? input.value.trim() : "";
 }
 
 function supplierLabel(item) {
