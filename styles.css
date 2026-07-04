@@ -770,12 +770,14 @@ h2 {
 }
 
 .stat-card[class*="tone-"],
-.quick-action[class*="tone-"] {
+.quick-action[class*="tone-"],
+.notion-division-card[class*="tone-"] {
   border-color: color-mix(in srgb, var(--tone) 25%, var(--line));
 }
 
 .stat-card[class*="tone-"] .stat-card-icon,
-.quick-action[class*="tone-"] span {
+.quick-action[class*="tone-"] span,
+.notion-division-card[class*="tone-"] .notion-division-icon {
   background: var(--tone-bg);
   color: var(--tone);
 }
@@ -924,6 +926,71 @@ h2 {
 
 .quick-action strong {
   font-size: 0.92rem;
+}
+
+.notion-overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.notion-overview article,
+.notion-division-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 16px;
+}
+
+.notion-overview span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.notion-overview strong {
+  display: block;
+  margin-top: 6px;
+  font-size: 1.08rem;
+}
+
+.notion-overview p,
+.notion-division-card p,
+.notion-link-status {
+  color: var(--muted);
+  margin: 6px 0 0;
+}
+
+.notion-division-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.notion-division-card {
+  display: grid;
+  gap: 12px;
+}
+
+.notion-division-icon {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.notion-division-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.notion-link-status {
+  font-weight: 800;
 }
 
 .daily-summary-grid {
@@ -2526,6 +2593,7 @@ dialog::backdrop {
   .purchase-row,
   .supplier-heading,
   .purchase-heading,
+  .notion-overview,
   .staff-toolbar,
   .toolbar {
     grid-template-columns: 1fr;

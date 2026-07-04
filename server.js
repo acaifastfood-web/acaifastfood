@@ -13,6 +13,13 @@ const NOTION_DATABASE_ID = process.env.NOTION_DATABASE_ID || "";
 const NOTION_REVENUE_DATABASE_ID = process.env.NOTION_REVENUE_DATABASE_ID || "";
 const NOTION_INVOICE_DATABASE_ID = process.env.NOTION_INVOICE_DATABASE_ID || "";
 const NOTION_PURCHASES_VIEW_URL = process.env.NOTION_PURCHASES_VIEW_URL || "";
+const NOTION_MANAGEMENT_DASHBOARD_URL = process.env.NOTION_MANAGEMENT_DASHBOARD_URL || "";
+const NOTION_MANAGEMENT_STOCK_URL = process.env.NOTION_MANAGEMENT_STOCK_URL || "";
+const NOTION_MANAGEMENT_REVENUE_URL = process.env.NOTION_MANAGEMENT_REVENUE_URL || "";
+const NOTION_MANAGEMENT_INVOICES_URL = process.env.NOTION_MANAGEMENT_INVOICES_URL || "";
+const NOTION_MANAGEMENT_USERS_URL = process.env.NOTION_MANAGEMENT_USERS_URL || "";
+const NOTION_MANAGEMENT_TIME_CLOCK_URL = process.env.NOTION_MANAGEMENT_TIME_CLOCK_URL || "";
+const NOTION_MANAGEMENT_ACTIVITIES_URL = process.env.NOTION_MANAGEMENT_ACTIVITIES_URL || "";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-5-mini";
 const OPENAI_VISION_FALLBACK_MODELS = ["gpt-5.5", "gpt-4.1-mini", "gpt-4o-mini"];
@@ -2497,8 +2504,19 @@ function isNotionConfigured() {
 }
 
 function getAppLinks() {
+  const purchasesNotionUrl = normalizedUrl(NOTION_PURCHASES_VIEW_URL) || notionDatabaseUrl(NOTION_DATABASE_ID);
   return {
-    purchasesNotionUrl: normalizedUrl(NOTION_PURCHASES_VIEW_URL) || notionDatabaseUrl(NOTION_DATABASE_ID),
+    purchasesNotionUrl,
+    managementDashboardUrl: normalizedUrl(NOTION_MANAGEMENT_DASHBOARD_URL) || notionDatabaseUrl(NOTION_DATABASE_ID),
+    managementLinks: {
+      stock: normalizedUrl(NOTION_MANAGEMENT_STOCK_URL) || notionDatabaseUrl(NOTION_DATABASE_ID),
+      revenue: normalizedUrl(NOTION_MANAGEMENT_REVENUE_URL) || notionDatabaseUrl(NOTION_REVENUE_DATABASE_ID),
+      invoices: normalizedUrl(NOTION_MANAGEMENT_INVOICES_URL) || notionDatabaseUrl(NOTION_INVOICE_DATABASE_ID),
+      purchases: purchasesNotionUrl,
+      users: normalizedUrl(NOTION_MANAGEMENT_USERS_URL),
+      timeClock: normalizedUrl(NOTION_MANAGEMENT_TIME_CLOCK_URL),
+      activities: normalizedUrl(NOTION_MANAGEMENT_ACTIVITIES_URL),
+    },
   };
 }
 

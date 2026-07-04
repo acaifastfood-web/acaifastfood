@@ -58,6 +58,7 @@
           <button class="sidebar-button" data-view-target="movimentos" type="button">Movimentos</button>
           <button class="sidebar-button" data-view-target="registos" type="button">Estoque atualizado</button>
           <button class="sidebar-button" data-view-target="atividades" type="button">Atividades</button>
+          <button class="sidebar-button" data-view-target="notion" type="button">Notion Gestão</button>
         </aside>
 
         <div class="manager-content">
@@ -656,6 +657,30 @@
 
         <div class="activity-summary" id="activitySummary"></div>
         <div class="activity-list" id="activityList"></div>
+      </section>
+
+      <section class="panel notion-panel manager-view" data-view="notion" hidden>
+        <div class="panel-heading">
+          <div>
+            <h2>Dashboard Gestão no Notion</h2>
+            <p class="panel-subtitle">Atalho para a página principal do Notion e suas divisões internas.</p>
+          </div>
+          <a class="button primary" id="managerNotionDashboardLink" href="#" target="_blank" rel="noopener" hidden>Abrir Notion</a>
+        </div>
+        <div class="notion-overview">
+          <article>
+            <span>Dashboard</span>
+            <strong>Gestão Açaí Fast Food</strong>
+            <p>Centraliza bases, conferências e acompanhamento operacional.</p>
+          </article>
+          <article>
+            <span>Sincronização</span>
+            <strong>App + Notion</strong>
+            <p>Os cartões abaixo levam ao módulo do app e, quando configurado, à página correspondente no Notion.</p>
+          </article>
+        </div>
+        <div class="notion-division-grid" id="notionDivisionList"></div>
+        <p class="notion-link-status" id="notionLinkStatus"></p>
       </section>
         </div>
       </div>

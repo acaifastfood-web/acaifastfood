@@ -21,6 +21,64 @@ const CONTROL_TYPE_OPTION_OVERRIDES = [
     aliases: ["Inventário Semanal Sala", "Inventario Semanal Sala", "Semanal"],
   },
 ];
+const NOTION_MANAGEMENT_DIVISIONS = [
+  {
+    id: "stock",
+    label: "Estoque",
+    description: "Base mestre, mínimos, fornecedores e tipo de controle.",
+    view: "inventario",
+    iconName: "stock",
+    tone: "purple",
+  },
+  {
+    id: "revenue",
+    label: "Faturação",
+    description: "Fecho diário, meios de pagamento, despesas e observações.",
+    view: "faturacao",
+    iconName: "sales",
+    tone: "green",
+  },
+  {
+    id: "invoices",
+    label: "Faturas",
+    description: "Faturas a pagar, vencimentos, estados e arquivo.",
+    view: "faturas",
+    iconName: "orders",
+    tone: "orange",
+  },
+  {
+    id: "purchases",
+    label: "Solicitações",
+    description: "Produtos abaixo do mínimo e lista por fornecedor.",
+    view: "pedidos",
+    iconName: "check",
+    tone: "blue",
+  },
+  {
+    id: "users",
+    label: "Funcionários",
+    description: "Acessos, setores, senhas e permissões.",
+    view: "funcionarios",
+    iconName: "more",
+    tone: "orange",
+  },
+  {
+    id: "timeClock",
+    label: "Ponto",
+    description: "Entrada, pausa, retorno e saída por funcionário.",
+    view: "ponto",
+    iconName: "movement",
+    tone: "blue",
+  },
+  {
+    id: "activities",
+    label: "Atividades",
+    description: "Ideias, pendências e itens resolvidos.",
+    view: "atividades",
+    iconName: "dashboard",
+    tone: "green",
+  },
+];
 const WHATSAPP_RECIPIENTS = [
   { label: "WhatsApp 1", phone: "351913163878" },
   { label: "WhatsApp 2", phone: "351912125244" },
@@ -83,6 +141,7 @@ let revenueRecords = [];
 let invoiceRecords = [];
 let timeRecords = [];
 let activities = load(ACTIVITIES_KEY, []).map(normalizeActivity);
+let appLinks = {};
 
 const elements = {
   form: document.querySelector("#itemForm"),
@@ -209,6 +268,9 @@ const elements = {
   clearResolvedActivitiesButton: document.querySelector("#clearResolvedActivitiesButton"),
   activitySummary: document.querySelector("#activitySummary"),
   activityList: document.querySelector("#activityList"),
+  managerNotionDashboardLink: document.querySelector("#managerNotionDashboardLink"),
+  notionDivisionList: document.querySelector("#notionDivisionList"),
+  notionLinkStatus: document.querySelector("#notionLinkStatus"),
   sidebarButtons: document.querySelectorAll("[data-view-target]"),
   managerViews: document.querySelectorAll("[data-view]"),
   moduleActions: document.querySelectorAll("[data-module-action]"),
@@ -268,6 +330,7 @@ elements.resetActivityFormButton.addEventListener("click", resetActivityForm);
 elements.clearResolvedActivitiesButton.addEventListener("click", clearResolvedActivities);
 elements.activityList.addEventListener("change", handleActivityStatusChange);
 elements.activityList.addEventListener("click", handleActivityAction);
+elements.notionDivisionList.addEventListener("click", handleNotionDivisionAction);
 
 seedActivityList();
 render();
@@ -292,6 +355,7 @@ function setManagerView(viewName) {
     button.classList.toggle("active", button.dataset.viewTarget === viewName);
   });
   updateModuleActions(viewName);
+  if (viewName === "notion") renderNotionDashboard();
 }
 
 function updateModuleActions(viewName) {
@@ -301,15 +365,22 @@ function updateModuleActions(viewName) {
 }
 
 async function fetchAppLinks() {
-  if (!elements.purchaseNotionLink) return;
   try {
     const response = await fetch("/api/app-links");
     const links = await response.json();
-    if (!response.ok || !links.purchasesNotionUrl) throw new Error("Link nao configurado.");
-    elements.purchaseNotionLink.href = links.purchasesNotionUrl;
-    elements.purchaseNotionLink.hidden = false;
+    if (!response.ok) throw new Error("Links nao configurados.");
+    appLinks = links || {};
+    if (links.purchasesNotionUrl) {
+      elements.purchaseNotionLink.href = links.purchasesNotionUrl;
+      elements.purchaseNotionLink.hidden = false;
+    } else {
+      elements.purchaseNotionLink.hidden = true;
+    }
   } catch {
+    appLinks = {};
     elements.purchaseNotionLink.hidden = true;
+  } finally {
+    renderNotionDashboard();
   }
 }
 
@@ -483,6 +554,7 @@ function renderManagerDashboard() {
     { iconName: "orders", label: "Funcionários e senhas", tone: "orange", action: "funcionarios" },
     { iconName: "sales", label: "Registro financeiro", tone: "purple", action: "relatorio" },
     { iconName: "orders", label: "Lista de Atividades", tone: "green", action: "atividades" },
+    { iconName: "dashboard", label: "Notion Gestão", tone: "purple", action: "notion" },
   ].forEach((button) => elements.managerQuickActions.appendChild(AcaiUI.QuickActionButton(button)));
 
   const monthlyRevenue = revenueRecords.filter((record) => String(record.date || "").slice(0, 7) === selectedMonth);
@@ -530,6 +602,7 @@ function handleManagerDashboardAction(event) {
   if (action === "atividades") return setManagerView("atividades");
   if (action === "faturas") return setManagerView("faturas");
   if (action === "ponto") return setManagerView("ponto");
+  if (action === "notion") return setManagerView("notion");
   if (action === "funcionarios") return setManagerView("funcionarios");
   if (action === "producao" || action === "movimentos") return setManagerView("movimentos");
   if (action === "pedidos") return setManagerView("pedidos");
@@ -539,6 +612,46 @@ function handleManagerDashboardAction(event) {
     return;
   }
   setManagerView("inventario");
+}
+
+function renderNotionDashboard() {
+  if (!elements.notionDivisionList) return;
+  const dashboardUrl = appLinks.managementDashboardUrl || "";
+  if (dashboardUrl) {
+    elements.managerNotionDashboardLink.href = dashboardUrl;
+    elements.managerNotionDashboardLink.hidden = false;
+  } else {
+    elements.managerNotionDashboardLink.hidden = true;
+  }
+
+  const managementLinks = appLinks.managementLinks || {};
+  elements.notionDivisionList.innerHTML = NOTION_MANAGEMENT_DIVISIONS.map((division) => {
+    const notionUrl = managementLinks[division.id] || "";
+    return `
+      <article class="notion-division-card tone-${escapeHtml(division.tone)}">
+        <div class="notion-division-icon">${AcaiUI.icon(division.iconName)}</div>
+        <div>
+          <strong>${escapeHtml(division.label)}</strong>
+          <p>${escapeHtml(division.description)}</p>
+        </div>
+        <div class="notion-division-actions">
+          <button class="button ghost" data-notion-view="${escapeHtml(division.view)}" type="button">Abrir no app</button>
+          ${notionUrl ? `<a class="button primary" href="${escapeHtml(notionUrl)}" target="_blank" rel="noopener">Notion</a>` : ""}
+        </div>
+      </article>
+    `;
+  }).join("");
+
+  const linkedCount = NOTION_MANAGEMENT_DIVISIONS.filter((division) => managementLinks[division.id]).length;
+  elements.notionLinkStatus.textContent = dashboardUrl || linkedCount
+    ? `${linkedCount} divisões com link direto para o Notion.`
+    : "Adicione NOTION_MANAGEMENT_DASHBOARD_URL no .env/Render para abrir a página Dashboard Gestão do Notion diretamente.";
+}
+
+function handleNotionDivisionAction(event) {
+  const button = event.target.closest("[data-notion-view]");
+  if (!button) return;
+  setManagerView(button.dataset.notionView);
 }
 
 function renderUpcomingInvoices() {
