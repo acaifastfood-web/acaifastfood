@@ -5,6 +5,7 @@ const ACTIVITIES_KEY = "acai-fast-food-activities-v1";
 const ACTIVITIES_SEED_KEY = "acai-fast-food-activities-seed-2026-07-01";
 const EXPIRING_DAYS = 7;
 const REQUIRED_CONTROL_TYPES = ["Diário", "Semanal", "Inventário Diário Sala", "Inventário Semanal Sala"];
+const DEFAULT_NOTION_MANAGEMENT_DASHBOARD_URL = "https://app.notion.com/p/Dashboard-Gest-o-397643c289174f3886e28b17f737329d?source=copy_link";
 const CONTROL_TYPE_OPTION_OVERRIDES = [
   {
     key: "sala-daily",
@@ -554,7 +555,7 @@ function renderManagerDashboard() {
     { iconName: "orders", label: "Funcionários e senhas", tone: "orange", action: "funcionarios" },
     { iconName: "sales", label: "Registro financeiro", tone: "purple", action: "relatorio" },
     { iconName: "orders", label: "Lista de Atividades", tone: "green", action: "atividades" },
-    { iconName: "dashboard", label: "Notion Gestão", tone: "purple", action: "notion" },
+    { iconName: "notion", label: "Dashboard Notion", tone: "purple", action: "notion" },
   ].forEach((button) => elements.managerQuickActions.appendChild(AcaiUI.QuickActionButton(button)));
 
   const monthlyRevenue = revenueRecords.filter((record) => String(record.date || "").slice(0, 7) === selectedMonth);
@@ -616,7 +617,7 @@ function handleManagerDashboardAction(event) {
 
 function renderNotionDashboard() {
   if (!elements.notionDivisionList) return;
-  const dashboardUrl = appLinks.managementDashboardUrl || "";
+  const dashboardUrl = appLinks.managementDashboardUrl || DEFAULT_NOTION_MANAGEMENT_DASHBOARD_URL;
   if (dashboardUrl) {
     elements.managerNotionDashboardLink.href = dashboardUrl;
     elements.managerNotionDashboardLink.hidden = false;
@@ -626,7 +627,7 @@ function renderNotionDashboard() {
 
   const managementLinks = appLinks.managementLinks || {};
   elements.notionDivisionList.innerHTML = NOTION_MANAGEMENT_DIVISIONS.map((division) => {
-    const notionUrl = managementLinks[division.id] || "";
+    const notionUrl = managementLinks[division.id] || dashboardUrl;
     return `
       <article class="notion-division-card tone-${escapeHtml(division.tone)}">
         <div class="notion-division-icon">${AcaiUI.icon(division.iconName)}</div>
@@ -644,7 +645,7 @@ function renderNotionDashboard() {
 
   const linkedCount = NOTION_MANAGEMENT_DIVISIONS.filter((division) => managementLinks[division.id]).length;
   elements.notionLinkStatus.textContent = dashboardUrl || linkedCount
-    ? `${linkedCount} divisões com link direto para o Notion.`
+    ? `${linkedCount} divisões com link direto próprio; as demais abrem o Dashboard Gestão principal.`
     : "Adicione NOTION_MANAGEMENT_DASHBOARD_URL no .env/Render para abrir a página Dashboard Gestão do Notion diretamente.";
 }
 

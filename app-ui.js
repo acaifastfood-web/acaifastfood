@@ -26,6 +26,10 @@
       '<path d="M12 5v14"/><path d="M5 12h14"/>',
     check:
       '<path d="m20 6-11 11-5-5"/>',
+    notion:
+      '<path d="M5 4h10l4 4v12H5z"/><path d="M15 4v5h5"/><path d="M9 13h6"/><path d="M9 17h4"/>',
+    external:
+      '<path d="M14 4h6v6"/><path d="M10 14 20 4"/><path d="M20 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h5"/>',
   };
 
   function icon(name) {
