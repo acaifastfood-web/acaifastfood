@@ -69,6 +69,8 @@ const PROPERTY_NAMES = {
   dailyMinimum: process.env.NOTION_PROPERTY_DAILY_MINIMUM || "Mínimo Diário",
   orderQuantity: process.env.NOTION_PROPERTY_ORDER_QUANTITY || "Quantidade a Comprar ",
   shouldBuy: process.env.NOTION_PROPERTY_SHOULD_BUY || "Comprar?",
+  purchaseStatus: process.env.NOTION_PROPERTY_PURCHASE_STATUS || "Status de compra",
+  inventoryStatus: process.env.NOTION_PROPERTY_INVENTORY_STATUS || "Status Inventário",
   unitCost: process.env.NOTION_PROPERTY_UNIT_COST || "Custo unitario",
   expiresAt: process.env.NOTION_PROPERTY_EXPIRES_AT || "Validade",
   supplier: process.env.NOTION_PROPERTY_SUPPLIER || "Fornecedor",
@@ -83,7 +85,9 @@ const PROPERTY_ALIASES = {
   quantity: ["Estoque atual", "Quantidade"],
   minimum: ["Mínimo Semanal", "Minimo Semanal", "Estoque minimo", "Estoque mínimo"],
   dailyMinimum: ["Mínimo Diário", "Minimo Diario"],
-  orderQuantity: ["Quantidade a Comprar ", "Quantidade a Comprar"],
+  orderQuantity: ["Quantidade a Comprar ", "Quantidade a Comprar", "Quantidade Comprar"],
+  purchaseStatus: ["Status de compra", "Status de Compra", "Status Compra", "Estado da compra"],
+  inventoryStatus: ["Status Inventário", "Status Inventario", "Status do Inventário", "Status do Inventario", "Estado Inventário", "Estado Inventario"],
   controlType: ["Tipo de controle ", "Tipo de controle"],
 };
 
@@ -1527,6 +1531,9 @@ function pageToItem(page, properties, titlePropertyName) {
     dailyMinimum: propertyNumber(getProperty("dailyMinimum")),
     orderQuantity: propertyNumber(getProperty("orderQuantity")),
     shouldBuy: propertyText(getProperty("shouldBuy")),
+    purchaseStatus: propertyText(getProperty("purchaseStatus")),
+    inventoryStatus: propertyText(getProperty("inventoryStatus")),
+    status: propertyText(getProperty("status")),
     unitCost: propertyNumber(getProperty("unitCost")),
     expiresAt: propertyDate(getProperty("expiresAt")),
     supplier: propertyText(getProperty("supplier")),
@@ -1703,6 +1710,8 @@ function buildNotionProperties(item, databaseProperties, titlePropertyName, skip
   setNotionPropertyValue(values, databaseProperties, "dailyMinimum", item.dailyMinimum);
   setNotionPropertyValue(values, databaseProperties, "orderQuantity", item.orderQuantity);
   setNotionPropertyValue(values, databaseProperties, "shouldBuy", item.shouldBuy);
+  setNotionPropertyValue(values, databaseProperties, "purchaseStatus", item.purchaseStatus);
+  setNotionPropertyValue(values, databaseProperties, "inventoryStatus", item.inventoryStatus);
   setNotionPropertyValue(values, databaseProperties, "unitCost", item.unitCost);
   setNotionPropertyValue(values, databaseProperties, "expiresAt", item.expiresAt);
   setNotionPropertyValue(values, databaseProperties, "supplier", item.supplier);
@@ -2347,6 +2356,9 @@ function normalizeItem(item) {
     dailyMinimum: numberValue(item.dailyMinimum),
     orderQuantity: numberValue(item.orderQuantity),
     shouldBuy: item.shouldBuy || "",
+    purchaseStatus: item.purchaseStatus || item.statusCompra || "",
+    inventoryStatus: item.inventoryStatus || item.statusInventario || "",
+    status: item.status || "",
     unitCost: numberValue(item.unitCost),
     expiresAt: item.expiresAt || "",
     supplier: item.supplier || "",

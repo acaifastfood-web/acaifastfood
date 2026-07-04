@@ -806,6 +806,144 @@ h2 {
   grid-column: 1 / -1;
 }
 
+.manager-executive-dashboard {
+  display: grid;
+  gap: 14px;
+}
+
+.manager-executive-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.manager-executive-block {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.manager-executive-block[class*="tone-"] {
+  border-color: color-mix(in srgb, var(--tone) 28%, var(--line));
+}
+
+.manager-executive-block-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.manager-executive-block-head span {
+  display: inline-flex;
+  border-radius: 999px;
+  background: var(--tone-bg);
+  color: var(--tone);
+  font-size: 0.72rem;
+  font-weight: 950;
+  letter-spacing: 0;
+  padding: 5px 9px;
+  text-transform: uppercase;
+}
+
+.manager-executive-block-head strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 1.15rem;
+}
+
+.manager-executive-block-head p,
+.manager-executive-note {
+  color: var(--muted);
+  margin: 5px 0 0;
+}
+
+.manager-executive-table-wrap {
+  overflow-x: auto;
+}
+
+.manager-executive-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.manager-executive-table th,
+.manager-executive-table td {
+  border-top: 1px solid var(--line);
+  padding: 9px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.manager-executive-table th {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.manager-executive-table td:first-child {
+  color: var(--ink);
+  font-weight: 850;
+}
+
+.manager-supplier-groups {
+  display: grid;
+  gap: 10px;
+}
+
+.manager-supplier-group {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.manager-supplier-group:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.manager-supplier-group > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.manager-supplier-group span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 850;
+}
+
+.manager-supplier-group ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.manager-supplier-group li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.manager-supplier-group b {
+  color: var(--ink);
+  white-space: nowrap;
+}
+
 .section-heading {
   display: flex;
   align-items: center;
@@ -2769,6 +2907,7 @@ dialog::backdrop {
   .portal-grid,
   .summary-grid,
   .dashboard-toolbar,
+  .manager-executive-grid,
   .manager-sidebar,
   .count-row,
   .count-row.has-expiry-field,
@@ -2808,6 +2947,7 @@ dialog::backdrop {
   .invoice-month-heading,
   .purchase-heading,
   .notion-master-panel-head,
+  .manager-executive-block-head,
   .count-record-head,
   .count-product-history-head,
   .purchase-summary {

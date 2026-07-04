@@ -164,6 +164,7 @@ const elements = {
   managerCountInfo: document.querySelector("#managerCountInfo"),
   managerDate: document.querySelector("#managerDate"),
   managerStatCards: document.querySelector("#managerStatCards"),
+  managerExecutiveDashboard: document.querySelector("#managerExecutiveDashboard"),
   managerCriticalList: document.querySelector("#managerCriticalList"),
   managerQuickActions: document.querySelector("#managerQuickActions"),
   managerDailySummary: document.querySelector("#managerDailySummary"),
@@ -541,20 +542,30 @@ function renderManagerDashboard() {
 
   const selectedDate = elements.managerDate.value || todayDateText();
   const selectedMonth = selectedDate.slice(0, 7);
+  const executiveDashboard = getExecutiveDashboardData(selectedDate);
   const lowStock = items.filter(isLowStock).sort((a, b) => criticalRatio(a) - criticalRatio(b));
   const todayMovements = movements.filter((movement) => String(movement.createdAt || "").slice(0, 10) === selectedDate);
   const monthMovements = movements.filter((movement) => String(movement.createdAt || "").slice(0, 7) === selectedMonth);
-  const productionsToday = todayMovements.filter((movement) => normalizeText(`${movement.itemName || ""} ${movement.reason || ""}`).includes("produc")).length;
-  const pendingActivities = activities.filter((activity) => activity.status === "Pendente").length;
+  const latestCount = executiveDashboard.latestCount;
 
   elements.managerStatCards.innerHTML = "";
   [
-    { iconName: "stock", value: items.length, label: "Itens em estoque", description: "Produtos ativos", tone: "purple", action: "estoque" },
-    { iconName: "alert", value: lowStock.length, label: "Itens críticos", description: "Abaixo do mínimo", tone: "red", action: "critical" },
-    { iconName: "production", value: productionsToday, label: "Produções hoje", description: "Lançamentos do dia", tone: "orange", action: "producao" },
-    { iconName: "movement", value: todayMovements.length, label: "Movimentações hoje", description: "Entradas e saídas", tone: "blue", action: "movimentos" },
-    { iconName: "orders", value: pendingActivities, label: "Atividades pendentes", description: "Ideias e pendências", tone: "green", action: "atividades" },
+    { iconName: "alert", value: executiveDashboard.ruptures.length, label: "Rupturas", description: "Status de compra RUPTURA", tone: "red", action: "dashboard-ruptures" },
+    { iconName: "orders", value: executiveDashboard.purchases.length, label: "Comprar Hoje", description: "Quantidade Comprar > 0", tone: "orange", action: "dashboard-purchases" },
+    { iconName: "movement", value: executiveDashboard.supplierGroups.length, label: "Fornecedores com Compra", description: "Fornecedores únicos", tone: "blue", action: "dashboard-suppliers" },
+    { iconName: "alert", value: executiveDashboard.recountItems.length, label: "Produtos sem Contagem", description: "Status Inventário RECONTAR", tone: "red", action: "dashboard-recount" },
+    { iconName: "check", value: executiveDashboard.todayCounts.length, label: "Contagens Hoje", description: formatDate(selectedDate), tone: "green", action: "registos" },
+    {
+      iconName: "movement",
+      value: latestCount ? formatDate(latestCount.countDate) : "-",
+      label: "Última Contagem",
+      description: latestCount ? `${latestCount.employeeName || latestCount.employeeUsername || "Sem responsável"} | ${latestCount.productName}` : "Sem registros",
+      tone: "purple",
+      action: "registos",
+    },
   ].forEach((card) => elements.managerStatCards.appendChild(AcaiUI.StatCard(card)));
+
+  renderManagerExecutiveDashboard(executiveDashboard);
 
   elements.managerCriticalList.innerHTML = "";
   elements.managerCriticalList.appendChild(
@@ -596,6 +607,204 @@ function renderManagerDashboard() {
   renderUpcomingInvoices();
 }
 
+function getExecutiveDashboardData(date = todayDateText()) {
+  const purchases = items
+    .filter((item) => dashboardQuantityToBuy(item) > 0)
+    .sort((a, b) => supplierLabel(a).localeCompare(supplierLabel(b)) || a.name.localeCompare(b.name));
+  const supplierGroups = groupBySupplier(purchases).sort((a, b) => a.supplier.localeCompare(b.supplier));
+  const ruptures = items.filter(isExecutiveRupture).sort((a, b) => a.name.localeCompare(b.name));
+  const recountItems = items.filter(isInventoryRecount).sort((a, b) => a.name.localeCompare(b.name));
+  const sortedCounts = [...countHistoryEntries].sort(compareCountHistoryEntries);
+  const latestCountByProduct = latestCountsByProduct(sortedCounts);
+
+  return {
+    date,
+    ruptures,
+    purchases,
+    supplierGroups,
+    recountItems,
+    todayCounts: sortedCounts.filter((entry) => entry.countDate === date),
+    latestCount: sortedCounts[0] || null,
+    latestCountByProduct,
+  };
+}
+
+function renderManagerExecutiveDashboard(data) {
+  if (!elements.managerExecutiveDashboard) return;
+  elements.managerExecutiveDashboard.innerHTML = `
+    <div class="section-heading">
+      <div>
+        <h2>Dashboard Gestor</h2>
+        <p class="panel-subtitle">Painel executivo reservado a Paulo e Vanessa.</p>
+      </div>
+      <button class="text-action" data-dashboard-action="registos" type="button">Histórico</button>
+    </div>
+
+    <div class="manager-executive-grid">
+      ${executiveTable({
+        title: "Rupturas",
+        subtitle: "Status de compra = RUPTURA",
+        tone: "red",
+        headers: ["Produto", "Estoque atual", "Mínimo diário", "Fornecedor"],
+        rows: data.ruptures.map((item) => [
+          item.name,
+          `${formatNumber(item.quantity)} ${item.unit}`,
+          `${formatNumber(item.dailyMinimum)} ${item.unit}`,
+          supplierLabel(item),
+        ]),
+        emptyText: "Sem produtos em ruptura.",
+        action: "dashboard-ruptures",
+        total: data.ruptures.length,
+      })}
+
+      ${executiveTable({
+        title: "Comprar Hoje",
+        subtitle: "Produtos com Quantidade Comprar acima de zero",
+        tone: "orange",
+        headers: ["Produto", "Quantidade comprar", "Unidade", "Fornecedor"],
+        rows: data.purchases.map((item) => [
+          item.name,
+          formatNumber(dashboardQuantityToBuy(item)),
+          item.unit,
+          supplierLabel(item),
+        ]),
+        emptyText: "Sem compras sugeridas.",
+        action: "dashboard-purchases",
+        total: data.purchases.length,
+      })}
+
+      ${executiveSupplierBlock(data.supplierGroups)}
+
+      ${executiveTable({
+        title: "Sem Contagem",
+        subtitle: "Status Inventário = RECONTAR",
+        tone: "red",
+        headers: ["Produto", "Última data", "Dias sem contagem", "Responsável"],
+        rows: data.recountItems.map((item) => {
+          const latest = latestCountForItem(item, data.latestCountByProduct);
+          return [
+            item.name,
+            latest ? formatDate(latest.countDate) : "Nunca contado",
+            latest ? formatNumber(daysSinceCount(latest.countDate, data.date)) : "-",
+            latest?.employeeName || latest?.employeeUsername || "-",
+          ];
+        }),
+        emptyText: "Sem produtos marcados para recontagem.",
+        action: "dashboard-recount",
+        total: data.recountItems.length,
+      })}
+    </div>
+  `;
+}
+
+function executiveTable({ title, subtitle, tone, headers, rows, emptyText, action, total }) {
+  const visibleRows = rows.slice(0, 10);
+  return `
+    <section class="manager-executive-block tone-${escapeHtml(tone)}">
+      <div class="manager-executive-block-head">
+        <div>
+          <span>${escapeHtml(title)}</span>
+          <strong>${formatNumber(total)} ${total === 1 ? "item" : "itens"}</strong>
+          <p>${escapeHtml(subtitle)}</p>
+        </div>
+        ${action ? `<button class="text-action" data-dashboard-action="${escapeHtml(action)}" type="button">Ver</button>` : ""}
+      </div>
+      ${visibleRows.length ? `
+        <div class="manager-executive-table-wrap">
+          <table class="manager-executive-table">
+            <thead>
+              <tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr>
+            </thead>
+            <tbody>
+              ${visibleRows.map((row) => `
+                <tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+        ${rows.length > visibleRows.length ? `<p class="manager-executive-note">Mostrando 10 de ${formatNumber(rows.length)}. Usa “Ver” para consultar todos.</p>` : ""}
+      ` : `<div class="mini-empty">${escapeHtml(emptyText)}</div>`}
+    </section>
+  `;
+}
+
+function executiveSupplierBlock(supplierGroups) {
+  const visibleGroups = supplierGroups.slice(0, 8);
+  return `
+    <section class="manager-executive-block tone-blue">
+      <div class="manager-executive-block-head">
+        <div>
+          <span>Compras por Fornecedor</span>
+          <strong>${formatNumber(supplierGroups.length)} grupos</strong>
+          <p>Produtos agrupados por fornecedor.</p>
+        </div>
+        <button class="text-action" data-dashboard-action="dashboard-suppliers" type="button">Ver</button>
+      </div>
+      ${visibleGroups.length ? `
+        <div class="manager-supplier-groups">
+          ${visibleGroups.map((group) => `
+            <article class="manager-supplier-group">
+              <div>
+                <strong>${escapeHtml(group.supplier)}</strong>
+                <span>${formatNumber(group.items.length)} ${group.items.length === 1 ? "produto" : "produtos"}</span>
+              </div>
+              <ul>
+                ${group.items.slice(0, 4).map((item) => `<li>${escapeHtml(item.name)} <b>${formatNumber(dashboardQuantityToBuy(item))} ${escapeHtml(item.unit)}</b></li>`).join("")}
+              </ul>
+            </article>
+          `).join("")}
+        </div>
+        ${supplierGroups.length > visibleGroups.length ? `<p class="manager-executive-note">Mostrando 8 de ${formatNumber(supplierGroups.length)} fornecedores.</p>` : ""}
+      ` : '<div class="mini-empty">Sem fornecedores com compras sugeridas.</div>'}
+    </section>
+  `;
+}
+
+function isExecutiveRupture(item) {
+  const purchaseStatus = normalizeText(item.purchaseStatus || item.statusCompra);
+  if (purchaseStatus) return purchaseStatus.includes("ruptura");
+  if (normalizeText(item.status).includes("ruptura")) return true;
+  return isRupture(item);
+}
+
+function dashboardQuantityToBuy(item) {
+  return numberValue(item.orderQuantity);
+}
+
+function isInventoryRecount(item) {
+  const status = normalizeText(item.inventoryStatus || item.statusInventario || item.inventoryState);
+  return status.includes("recontar");
+}
+
+function compareCountHistoryEntries(a, b) {
+  return String(b.countDate || "").localeCompare(String(a.countDate || "")) || String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+}
+
+function latestCountsByProduct(entries) {
+  const latest = new Map();
+  for (const entry of entries) {
+    for (const key of countProductKeys(entry)) {
+      if (key && !latest.has(key)) latest.set(key, entry);
+    }
+  }
+  return latest;
+}
+
+function latestCountForItem(item, latestMap) {
+  return latestMap.get(item.id) || latestMap.get(normalizeText(item.name)) || null;
+}
+
+function countProductKeys(entry) {
+  return [entry.productId, normalizeText(entry.productName)].filter(Boolean);
+}
+
+function daysSinceCount(countDate, referenceDate = todayDateText()) {
+  const count = new Date(`${countDate}T00:00:00`);
+  const reference = new Date(`${referenceDate}T00:00:00`);
+  if (Number.isNaN(count.getTime()) || Number.isNaN(reference.getTime())) return 0;
+  return Math.max(0, Math.floor((reference - count) / 86400000));
+}
+
 function revenueGrossTotal(record) {
   if (record && Object.prototype.hasOwnProperty.call(record, "grossTotal")) return numberValue(record.grossTotal);
   return (
@@ -613,6 +822,15 @@ function handleManagerDashboardAction(event) {
   const target = event.target.closest("[data-dashboard-action], [data-action]");
   if (!target) return;
   const action = target.dataset.dashboardAction || target.dataset.action;
+  if (action === "dashboard-ruptures") {
+    elements.statusFilter.value = "low";
+    setManagerView("inventario");
+    render();
+    elements.searchInput.focus();
+    return;
+  }
+  if (action === "dashboard-purchases" || action === "dashboard-suppliers") return setManagerView("pedidos");
+  if (action === "dashboard-recount") return setManagerView("registos");
   if (action === "critical") {
     elements.statusFilter.value = "low";
     setManagerView("inventario");
@@ -675,10 +893,10 @@ function renderNotionDashboard() {
 
 function renderNotionMasterDashboard() {
   if (!elements.notionMasterDashboard) return;
-  const purchaseSuggestions = getPurchaseSuggestions();
-  const ruptures = items.filter(isRupture).sort((a, b) => a.name.localeCompare(b.name));
-  const todayPurchases = purchaseSuggestions.filter(isPurchaseDueToday);
-  const supplierGroups = groupBySupplier(purchaseSuggestions);
+  const dashboardData = getExecutiveDashboardData(todayDateText());
+  const ruptures = dashboardData.ruptures;
+  const todayPurchases = dashboardData.purchases;
+  const supplierGroups = dashboardData.supplierGroups;
   const updatedAt = latestItemUpdateText();
 
   elements.notionMasterDashboard.innerHTML = `
@@ -696,8 +914,8 @@ function renderNotionMasterDashboard() {
 
       <div class="notion-master-stats">
         ${notionMetricCard("Produtos", items.length, "Total na base mestre")}
-        ${notionMetricCard("Rupturas", ruptures.length, "Estoque zerado")}
-        ${notionMetricCard("Comprar hoje", todayPurchases.length, todayOrderDay())}
+        ${notionMetricCard("Rupturas", ruptures.length, "Status de compra RUPTURA")}
+        ${notionMetricCard("Comprar hoje", todayPurchases.length, "Quantidade Comprar > 0")}
         ${notionMetricCard("Fornecedores", supplierGroups.length, "Com solicitação")}
       </div>
 
@@ -754,7 +972,7 @@ function notionTodayPurchasesPanel(todayPurchases) {
         <strong>${escapeHtml(item.name)}</strong>
         <span>${escapeHtml(supplierLabel(item))}</span>
       </div>
-      <b>${formatNumber(getQuantityToOrder(item))} ${escapeHtml(item.unit)}</b>
+      <b>${formatNumber(dashboardQuantityToBuy(item))} ${escapeHtml(item.unit)}</b>
     </article>
   `).join("");
 
@@ -763,7 +981,7 @@ function notionTodayPurchasesPanel(todayPurchases) {
       <div class="notion-master-panel-head">
         <div>
           <span>Comprar hoje</span>
-          <strong>${escapeHtml(todayOrderDay())}</strong>
+          <strong>Qtd comprar &gt; 0</strong>
         </div>
         <button class="text-action" data-notion-master-action="today" type="button">Abrir lista</button>
       </div>
@@ -1968,8 +2186,10 @@ async function fetchCountRecords() {
     countRecords = result.records || [];
     countHistoryEntries = Array.isArray(result.entries) ? result.entries : flattenClientCountRecords(countRecords);
     renderCountHistory();
+    renderManagerDashboard();
   } catch (error) {
     elements.countRecordList.innerHTML = `<div class="empty-state"><h3>Sem histórico</h3><p>${escapeHtml(error.message || "Nao foi possivel carregar o historico.")}</p></div>`;
+    renderManagerDashboard();
   }
 }
 
@@ -3007,6 +3227,9 @@ function normalizeItem(item) {
     dailyMinimum: numberValue(item.dailyMinimum),
     orderQuantity: numberValue(item.orderQuantity),
     shouldBuy: item.shouldBuy || "",
+    purchaseStatus: item.purchaseStatus || item.statusCompra || "",
+    inventoryStatus: item.inventoryStatus || item.statusInventario || "",
+    status: item.status || "",
     unitCost: numberValue(item.unitCost),
     expiresAt: item.expiresAt || "",
     supplier: item.supplier || "",
