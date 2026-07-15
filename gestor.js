@@ -4,7 +4,7 @@ const PURCHASE_SELECTION_KEY = "acai-fast-food-purchase-selection-v1";
 const ACTIVITIES_KEY = "acai-fast-food-activities-v1";
 const ACTIVITIES_SEED_KEY = "acai-fast-food-activities-seed-2026-07-01";
 const EXPIRING_DAYS = 7;
-const REQUIRED_CONTROL_TYPES = ["Diário", "Semanal", "Inventário Diário Sala", "Inventário Semanal Sala"];
+const REQUIRED_CONTROL_TYPES = ["Diário", "Semanal", "Controle da Sala", "Inventário Diário Sala", "Inventário Semanal Sala"];
 const DEFAULT_NOTION_MANAGEMENT_DASHBOARD_URL = "https://app.notion.com/p/Dashboard-Gest-o-397643c289174f3886e28b17f737329d?source=copy_link";
 const CONTROL_TYPE_OPTION_OVERRIDES = [
   {

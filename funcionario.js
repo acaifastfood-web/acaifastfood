@@ -5,7 +5,7 @@ const WHATSAPP_RECIPIENTS = [
   { label: "WhatsApp 1", phone: "351913163878" },
   { label: "WhatsApp 2", phone: "351912125244" },
 ];
-const REQUIRED_CONTROL_TYPES = ["Diário", "Semanal", "Inventário Diário Sala", "Inventário Semanal Sala"];
+const REQUIRED_CONTROL_TYPES = ["Diário", "Semanal", "Controle da Sala", "Inventário Diário Sala", "Inventário Semanal Sala"];
 const CONTROL_TYPE_OPTION_OVERRIDES = [
   {
     key: "sala-daily",
@@ -647,6 +647,7 @@ function getFilteredItems() {
       const haystack = `${item.name} ${item.supplier} ${item.category} ${item.orderDay} ${item.controlType}`.toLowerCase();
       return !term || haystack.includes(term);
     })
+    .filter(shouldShowItemForUserSector)
     .filter((item) => matchesControlTypeFilter(item, controlTypeFilter))
     .filter((item) => matchesSalaFrequencyFilter(item, salaFrequencyFilter))
     .sort((a, b) => {
@@ -668,6 +669,15 @@ function canUseSalaFrequencyFilter() {
   const sector = normalizeControlType(user.sector);
   const role = normalizeControlType(user.role);
   return sector === "sala" || sector === "gestao" || role === "manager" || role === "admin";
+}
+
+function shouldShowItemForUserSector(item) {
+  const user = auth?.user || {};
+  const sector = normalizeControlType(user.sector);
+  const role = normalizeControlType(user.role);
+  if (sector === "gestao" || role === "manager" || role === "admin") return true;
+  if (sector === "cozinha") return !hasControlType(item, "Controle da Sala");
+  return true;
 }
 
 function renderControlTypeOptions() {
