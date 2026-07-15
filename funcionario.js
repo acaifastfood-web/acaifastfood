@@ -59,6 +59,7 @@ const elements = {
   whatsappShare: document.querySelector("#whatsappShare"),
   countDate: document.querySelector("#countDate"),
   controlTypeFilter: document.querySelector("#controlTypeFilter"),
+  salaFrequencyField: document.querySelector("#salaFrequencyField"),
   salaFrequencyFilter: document.querySelector("#salaFrequencyFilter"),
   staffSearchInput: document.querySelector("#staffSearchInput"),
   clearStaffSearchButton: document.querySelector("#clearStaffSearchButton"),
@@ -230,6 +231,8 @@ function showApp() {
   elements.staffBottomNav.hidden = false;
   elements.headerLogoutButton.hidden = false;
   elements.loginStatus.textContent = "";
+  syncSectorFilters();
+  renderCountList();
   renderStaffDashboard();
   fetchMyTimeRecord();
 }
@@ -637,7 +640,7 @@ function renderExpiryField(item) {
 function getFilteredItems() {
   const term = elements.staffSearchInput.value.trim().toLowerCase();
   const controlTypeFilter = elements.controlTypeFilter.value;
-  const salaFrequencyFilter = elements.salaFrequencyFilter.value;
+  const salaFrequencyFilter = canUseSalaFrequencyFilter() ? elements.salaFrequencyFilter.value : "all";
 
   return items
     .filter((item) => {
@@ -651,6 +654,20 @@ function getFilteredItems() {
       if (supplierOrder !== 0) return supplierOrder;
       return Number(isLowStock(b)) - Number(isLowStock(a)) || a.name.localeCompare(b.name);
     });
+}
+
+function syncSectorFilters() {
+  const canUseSalaFilter = canUseSalaFrequencyFilter();
+  if (!canUseSalaFilter) elements.salaFrequencyFilter.value = "all";
+  elements.salaFrequencyFilter.disabled = !canUseSalaFilter;
+  elements.salaFrequencyField.hidden = !canUseSalaFilter;
+}
+
+function canUseSalaFrequencyFilter() {
+  const user = auth?.user || {};
+  const sector = normalizeControlType(user.sector);
+  const role = normalizeControlType(user.role);
+  return sector === "sala" || sector === "gestao" || role === "manager" || role === "admin";
 }
 
 function renderControlTypeOptions() {
