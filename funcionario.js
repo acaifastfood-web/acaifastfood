@@ -986,13 +986,13 @@ function showsDailyMinimum(item) {
 function showsWeeklyMinimum(item) {
   const selectedControl = elements.controlTypeFilter.value;
   if (selectedControl === "Controle da Sala") return true;
+  if (sameControlType(selectedControl, "Pingo Doce Quinta")) return true;
   if (sameControlType(selectedControl, "Semanal") || sameControlType(selectedControl, "Inventário Semanal Sala")) return true;
   if (
     sameControlType(selectedControl, "Diário") ||
-    sameControlType(selectedControl, "Inventário Diário Sala") ||
-    sameControlType(selectedControl, "Pingo Doce Quinta")
+    sameControlType(selectedControl, "Inventário Diário Sala")
   ) return false;
-  return hasControlType(item, "semanal") || hasControlType(item, "controle da sala");
+  return hasControlType(item, "semanal") || hasControlType(item, "controle da sala") || hasControlType(item, "pingo doce quinta");
 }
 
 function hasControlType(item, expected) {
