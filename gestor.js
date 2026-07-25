@@ -580,7 +580,6 @@ function renderManagerDashboard() {
   [
     { iconName: "check", label: "Lançar Estoque", tone: "purple", action: "estoque" },
     { iconName: "orders", label: "Lançar faturas", tone: "orange", action: "faturas" },
-    { iconName: "movement", label: "Ajuste de Estoque", tone: "green", action: "ajuste" },
     { iconName: "search", label: "Consultar Estoque", tone: "blue", action: "consulta" },
     { iconName: "check", label: "Ponto", tone: "blue", action: "ponto" },
     { iconName: "orders", label: "Funcionários e senhas", tone: "orange", action: "funcionarios" },
