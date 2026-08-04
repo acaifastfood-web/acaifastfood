@@ -355,7 +355,7 @@ function inferProductionCenter(item) {
   return "Açaí";
 }
 function displayModifier(value) {
-  return String(value || "").replace(/^(Complemento|Fruta|Topping|Sabor|Chantilly):\s*/i, "");
+  return String(value || "").replace(/^(Sabor|Chantilly):\s*/i, "");
 }
 function normalizeItemText(item) {
   return String(`${item?.productId || ""} ${item?.name || ""}`).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();

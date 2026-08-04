@@ -140,6 +140,14 @@ button { cursor: pointer; }
 .custom-option input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .custom-option:has(input:checked) { border-color: var(--order-brand); background: #f2e6ef; color: var(--order-brand); box-shadow: inset 0 0 0 1px var(--order-brand); }
 .custom-option:has(input:disabled) { opacity: .38; cursor: not-allowed; }
+.custom-quantity-option { min-height: 82px; align-content: space-between; gap: 7px; cursor: default; }
+.custom-quantity-option > span { display: block; line-height: 1.15; }
+.custom-quantity-option.selected { border-color: var(--order-brand); background: #f2e6ef; color: var(--order-brand); box-shadow: inset 0 0 0 1px var(--order-brand); }
+.custom-quantity-option.is-disabled:not(.selected) { opacity: .42; }
+.custom-quantity-controls { display: grid; grid-template-columns: 30px 30px 30px; gap: 5px; align-items: center; justify-content: center; width: 100%; }
+.custom-quantity-controls button { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid #d9c6d4; border-radius: 8px; background: #fff; color: var(--order-brand); padding: 0; font-size: 1rem; font-weight: 950; }
+.custom-quantity-controls button:disabled { opacity: .35; cursor: not-allowed; }
+.custom-quantity-controls b { display: grid; height: 30px; place-items: center; border-radius: 8px; background: #fff; color: var(--order-ink); font-size: .82rem; font-variant-numeric: tabular-nums; }
 .custom-extra-notes { display: grid; gap: 10px; border: 1px solid var(--order-line); border-radius: 12px; background: #fff; padding: 11px; }
 .custom-extra-option { display: grid; grid-template-columns: 24px 1fr auto; align-items: center; gap: 9px; border: 1px solid #dfc9d9; border-radius: 10px; background: #faf4f8; padding: 11px; cursor: pointer; }
 .custom-extra-option input { width: 19px; height: 19px; accent-color: var(--order-brand); }

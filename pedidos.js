@@ -93,6 +93,7 @@ elements.tableAccountOrders.addEventListener("change", handlePaymentItemSelectio
 elements.mixedPaymentToggle.addEventListener("change", updateTablePayment);
 elements.mixedPaymentFields.addEventListener("input", updateTablePayment);
 elements.acaiCustomizationForm.addEventListener("change", updateCustomizationLimits);
+elements.acaiCustomizationForm.addEventListener("click", handleCustomizationQuantityClick);
 elements.acaiCustomizationForm.addEventListener("submit", confirmAcaiCustomization);
 elements.cancelAcaiCustomization.addEventListener("click", closeAcaiCustomization);
 
@@ -445,7 +446,16 @@ function addProduct(productId) {
 function renderCustomizationOptions() {
   for (const [group, options] of Object.entries(acaiCustomization)) {
     const container = elements[`${group}Options`];
-    container.innerHTML = options.map((option) => `<label class="custom-option"><input type="checkbox" name="${group}" value="${escapeHtml(option)}"><span>${escapeHtml(option)}</span></label>`).join("");
+    container.innerHTML = options.map((option) => `
+      <div class="custom-option custom-quantity-option" data-custom-option data-group="${escapeHtml(group)}" data-value="${escapeHtml(option)}" data-quantity="0">
+        <span>${escapeHtml(option)}</span>
+        <div class="custom-quantity-controls">
+          <button data-custom-step="-1" type="button" aria-label="Remover ${escapeHtml(option)}">-</button>
+          <b data-custom-quantity>0</b>
+          <button data-custom-step="1" type="button" aria-label="Adicionar ${escapeHtml(option)}">+</button>
+        </div>
+      </div>
+    `).join("");
   }
   elements.juiceFlavorOptions.innerHTML = naturalJuiceFlavors.map((flavor) => `<label class="custom-option"><input type="radio" name="juiceFlavor" value="${escapeHtml(flavor)}"><span>${escapeHtml(flavor)}</span></label>`).join("");
 }
@@ -460,6 +470,7 @@ function openProductCustomization(product) {
   elements.customAcaiName.textContent = `${product.name} · ${product.variant.split(" · ")[0]}`;
   elements.customAcaiPrice.textContent = money(product.price);
   elements.acaiCustomizationForm.reset();
+  resetCustomizationQuantities();
   elements.comboConfiguration.hidden = !isCombo;
   elements.chantillyChoiceGroup.hidden = !isShake;
   elements.chantillyChoiceOptions.querySelectorAll('input[name="chantillyChoice"]').forEach((input) => { input.disabled = !isShake; });
@@ -476,20 +487,70 @@ function closeAcaiCustomization() {
 }
 
 function updateCustomizationLimits() {
-  document.querySelectorAll(".custom-option-group").forEach((section) => {
+  document.querySelectorAll(".custom-option-group[data-group]").forEach((section) => {
     const group = section.dataset.group;
     const limit = Number(section.dataset.limit);
-    const inputs = [...section.querySelectorAll(`input[name="${group}"]`)];
-    const checked = inputs.filter((input) => input.checked).length;
-    inputs.forEach((input) => { input.disabled = !input.checked && checked >= limit; });
+    const selected = customizationGroupTotal(section);
+    const options = [...section.querySelectorAll("[data-custom-option]")];
+    options.forEach((option) => {
+      const quantity = customizationOptionQuantity(option);
+      const minusButton = option.querySelector('[data-custom-step="-1"]');
+      const plusButton = option.querySelector('[data-custom-step="1"]');
+      const quantityLabel = option.querySelector("[data-custom-quantity]");
+      option.classList.toggle("selected", quantity > 0);
+      option.classList.toggle("is-disabled", quantity === 0 && selected >= limit);
+      if (minusButton) minusButton.disabled = quantity <= 0;
+      if (plusButton) plusButton.disabled = selected >= limit;
+      if (quantityLabel) quantityLabel.textContent = String(quantity);
+    });
     const count = document.querySelector(`#${group}Count`);
-    if (count) count.textContent = `${checked}/${limit}`;
+    if (count) count.textContent = `${selected}/${limit}`;
   });
   const product = menu.find((item) => item.id === customizingProductId);
   if (product) {
     updateJuiceFlavorVisibility(product);
     elements.customAcaiPrice.textContent = money(product.price + customizationSurcharge(product));
   }
+}
+
+function handleCustomizationQuantityClick(event) {
+  const button = event.target.closest("button[data-custom-step]");
+  if (!button) return;
+  const option = button.closest("[data-custom-option]");
+  const section = option?.closest(".custom-option-group[data-group]");
+  if (!option || !section || section.hidden) return;
+
+  const limit = Number(section.dataset.limit);
+  const selected = customizationGroupTotal(section);
+  const quantity = customizationOptionQuantity(option);
+  const step = Number(button.dataset.customStep || 0);
+  const available = Math.max(0, limit - selected);
+  const nextQuantity = step > 0
+    ? quantity + Math.min(step, available)
+    : Math.max(0, quantity + step);
+
+  if (nextQuantity === quantity && step > 0) {
+    showToast(`Limite de ${limit} seleções atingido.`);
+    return;
+  }
+
+  option.dataset.quantity = String(nextQuantity);
+  updateCustomizationLimits();
+}
+
+function resetCustomizationQuantities() {
+  elements.acaiCustomizationForm.querySelectorAll("[data-custom-option]").forEach((option) => {
+    option.dataset.quantity = "0";
+  });
+}
+
+function customizationGroupTotal(section) {
+  return [...section.querySelectorAll("[data-custom-option]")]
+    .reduce((total, option) => total + customizationOptionQuantity(option), 0);
+}
+
+function customizationOptionQuantity(option) {
+  return Math.max(0, Number(option?.dataset.quantity || 0));
 }
 
 function updateJuiceFlavorVisibility(product) {
@@ -534,9 +595,9 @@ function buildComboComponents(product, selected, juiceFlavor, note) {
   const metadata = comboMetadata(product);
   const comboVariant = product.name;
   const acaiModifiers = [
-    ...selected.complements.map((value) => `Complemento: ${value}`),
-    ...selected.fruits.map((value) => `Fruta: ${value}`),
-    ...selected.toppings.map((value) => `Topping: ${value}`),
+    ...customizationModifiers("Complemento", selected.complements),
+    ...customizationModifiers("Fruta", selected.fruits),
+    ...customizationModifiers("Topping", selected.toppings),
   ];
   const mainModifiers = elements.customProductExtra.checked ? ["Extra (+1,00 €)"] : [];
   const component = (name, variant, productionCenter, quantity = 1, modifiers = []) => ({
@@ -586,7 +647,7 @@ function confirmAcaiCustomization(event) {
   }
   const selected = {};
   for (const group of Object.keys(acaiCustomization)) {
-    selected[group] = [...elements.acaiCustomizationForm.querySelectorAll(`input[name="${group}"]:checked`)].map((input) => input.value);
+    selected[group] = selectedCustomizationValues(group);
   }
   const modifiers = [];
   if (product.category === "Combos") {
@@ -597,9 +658,9 @@ function confirmAcaiCustomization(event) {
     modifiers.push(`Açaí: ${elements.comboAcaiSizeOption.value}${metadata.acaiCount > 1 ? ` ×${metadata.acaiCount}` : ""}`);
   }
   if (["Açaí", "Combos"].includes(product.category)) {
-    selected.complements.forEach((value) => modifiers.push(`Complemento: ${value}`));
-    selected.fruits.forEach((value) => modifiers.push(`Fruta: ${value}`));
-    selected.toppings.forEach((value) => modifiers.push(`Topping: ${value}`));
+    modifiers.push(...customizationModifiers("Complemento", selected.complements));
+    modifiers.push(...customizationModifiers("Fruta", selected.fruits));
+    modifiers.push(...customizationModifiers("Topping", selected.toppings));
   }
   if (product.name === "Sumo natural") modifiers.push(`Sabor: ${juiceFlavor}`);
   if (product.category === "Batidos") modifiers.push(`Chantilly: ${chantillyChoice}`);
@@ -614,6 +675,20 @@ function confirmAcaiCustomization(event) {
     unitPrice: product.price + customizationSurcharge(product),
   });
   closeAcaiCustomization(); renderCart(); showToast(`${product.name} personalizado e adicionado`);
+}
+
+function selectedCustomizationValues(group) {
+  return [...elements.acaiCustomizationForm.querySelectorAll(`[data-custom-option][data-group="${group}"]`)]
+    .flatMap((option) => Array.from({ length: customizationOptionQuantity(option) }, () => option.dataset.value || ""));
+}
+
+function customizationModifiers(label, values) {
+  const counts = new Map();
+  for (const value of values) {
+    if (!value) continue;
+    counts.set(value, (counts.get(value) || 0) + 1);
+  }
+  return [...counts.entries()].map(([value, quantity]) => `${label}: ${value}${quantity > 1 ? ` ×${quantity}` : ""}`);
 }
 
 function handleCartAction(event) {
