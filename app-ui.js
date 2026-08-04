@@ -92,6 +92,7 @@
   }
 
   function QuickActionButton({ iconName = "plus", label = "", tone = "purple", action = "" }) {
+    if (action === "adjust") return document.createComment("stock adjustment hidden");
     return nodeFromHtml(`
       <button class="quick-action tone-${escapeHtml(tone)}" type="button" ${action ? `data-action="${escapeHtml(action)}"` : ""}>
         <span>${icon(iconName)}</span>

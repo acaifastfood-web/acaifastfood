@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest-funcionario.json" />
     <link rel="icon" href="icon-funcionario-192.png" type="image/png" />
     <link rel="apple-touch-icon" href="icon-funcionario-512.png" />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260804-responsavel" />
   </head>
   <body class="app-mobile-shell">
     <header class="app-header app-header-modern">
@@ -53,7 +53,7 @@
               <option value="">Escolher funcionário</option>
             </select>
           </label>
-          <label>
+          <label id="loginUsernameField" hidden>
             Utilizador
             <input id="loginUsername" name="username" type="text" required />
           </label>
@@ -131,10 +131,14 @@
           </div>
           <div class="row-actions">
             <button class="button ghost" id="logoutButton" type="button">Sair</button>
-            <button class="button primary" id="saveCountsButton" type="button">Guardar contagem</button>
+            <button class="button primary" id="saveCountsButton" type="button">Guardar tudo</button>
           </div>
         </div>
         <div class="staff-toolbar">
+          <label class="responsible-field">
+            Responsável pelo preenchimento
+            <input id="countResponsible" type="text" readonly />
+          </label>
           <label>
             Tipo de controle
             <select id="controlTypeFilter">
@@ -159,6 +163,13 @@
         </div>
         <p class="list-count" id="staffCountInfo">0 produtos visiveis</p>
         <div class="count-list" id="countList"></div>
+        <div class="count-batch-bar" id="countBatchBar" hidden>
+          <div>
+            <strong id="countBatchSummary">0 itens por guardar</strong>
+            <span>Preenche vários produtos e guarda tudo junto.</span>
+          </div>
+          <button class="button primary" id="saveCountsBottomButton" type="button">Guardar tudo</button>
+        </div>
       </section>
 
       <nav class="bottom-navigation" id="staffBottomNav" aria-label="Navegação principal" hidden>
@@ -185,7 +196,18 @@
       </nav>
     </main>
 
-    <script src="app-ui.js"></script>
-    <script src="funcionario.js"></script>
+    <script src="app-ui.js?v=20260804-responsavel"></script>
+    <script src="funcionario.js?v=20260804-responsavel"></script>
+    <script>
+      (() => {
+        const removeStockAdjustmentButton = () => {
+          document.querySelectorAll("button").forEach((button) => {
+            if (button.textContent.trim().toLowerCase() === "ajuste de estoque") button.remove();
+          });
+        };
+        removeStockAdjustmentButton();
+        new MutationObserver(removeStockAdjustmentButton).observe(document.body, { childList: true, subtree: true });
+      })();
+    </script>
   </body>
 </html>

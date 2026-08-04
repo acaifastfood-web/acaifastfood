@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="pt-PT">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Caixa e Pedidos | Açaí Fast Food</title>
+    <meta name="theme-color" content="#5a174f" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="orders.css" />
+  </head>
+  <body>
+    <header class="order-header">
+      <div class="order-brand">
+        <img src="logo-acai.png" alt="Açaí Fast Food" />
+        <div><p>Operação</p><h1>Caixa & Pedidos</h1></div>
+      </div>
+      <div class="header-tools">
+        <span class="operator-pill" id="operatorName">Sem sessão</span>
+        <a class="header-link" href="kds.html">Abrir KDS</a>
+        <a class="header-link" href="index.html">Apps</a>
+        <button class="header-button" id="logoutButton" type="button">Sair</button>
+      </div>
+    </header>
+
+    <main class="pos-layout">
+      <section class="catalog-pane">
+        <div class="catalog-heading">
+          <div><h2>Menu de produtos</h2><p>Selecione a categoria e toque no produto.</p></div>
+          <label class="search-box"><input id="productSearch" type="search" placeholder="Pesquisar produto…" /></label>
+        </div>
+        <div class="category-tabs" id="categoryTabs" aria-label="Categorias do menu"></div>
+        <div class="product-grid" id="productGrid"></div>
+        <section class="service-area">
+          <div class="service-required-message" id="serviceRequiredMessage">Selecione uma mesa ou Retirada | Entrega antes de iniciar o pedido.</div>
+          <div class="tables-panel" id="tablesPanel" role="tabpanel" hidden>
+            <div class="tables-panel-head"><div><strong>Selecionar mesa</strong><span>Verde: livre · Laranja: ocupada</span></div><div class="table-panel-actions"><button id="viewTableAccountButton" type="button" disabled>Consultar consumo</button><button id="transferTableButton" type="button" disabled>Transferir mesa</button><span id="tablesSummary">50 livres</span></div></div>
+            <div class="table-grid" id="tableGrid"></div>
+          </div>
+          <div class="service-tabs" role="tablist" aria-label="Área de atendimento">
+            <button class="service-tab" id="tablesTab" data-service-mode="tables" role="tab" aria-selected="false" type="button">Mesas <span>50</span></button>
+            <button class="service-tab" id="counterTab" data-service-mode="counter" role="tab" aria-selected="false" type="button">Retirada | Entrega</button>
+          </div>
+        </section>
+      </section>
+
+      <aside class="cart-pane">
+        <div class="cart-heading"><div><span>CAIXA</span><h2>Pedido atual</h2></div><span class="cart-count" id="cartCount">0</span></div>
+        <div class="cart-items" id="cartItems"></div>
+        <div class="order-details">
+          <label class="field" id="orderChannelField">Tipo de pedido
+            <select id="orderChannel"><option value="takeaway">Retirada</option><option value="delivery">Entrega</option></select>
+          </label>
+          <label class="field" id="orderTableField">Mesa / referência<input id="orderTable" maxlength="30" placeholder="Ex.: Mesa 4" /></label>
+          <label class="field">Cliente<input id="customerName" maxlength="80" placeholder="Nome (opcional)" /></label>
+          <label class="field" id="paymentMethodField">Pagamento<select id="paymentMethod"><option value="cash">DINHEIRO</option><option value="multibanco">MULTIBANCO</option><option value="mbway">MB WAY</option><option value="account">CONTA</option></select></label>
+          <label class="field full">Observações<textarea id="orderNotes" maxlength="500" placeholder="Sem banana, alergias, entrega…"></textarea></label>
+        </div>
+        <div class="cart-footer">
+          <div class="total-row"><span>Total</span><strong id="cartTotal">0,00 €</strong></div>
+          <button class="primary-action" id="sendOrderButton" type="button" disabled>Enviar para a cozinha</button>
+          <p class="form-status" id="orderStatus"></p>
+        </div>
+      </aside>
+    </main>
+
+    <dialog class="acai-custom-dialog" id="acaiCustomizationDialog">
+      <form id="acaiCustomizationForm">
+        <header class="acai-custom-head">
+          <div><span id="customDialogEyebrow">Personalizar Açaí</span><strong id="customAcaiName">Açaí</strong></div>
+          <strong id="customAcaiPrice">0,00 €</strong>
+        </header>
+        <div class="acai-custom-body">
+          <section class="combo-only-group" id="comboConfiguration" hidden>
+            <div class="custom-group-head"><div><strong>Opções do combo</strong><span>Configure os produtos incluídos</span></div></div>
+            <div class="combo-fields">
+              <label id="comboMainField">Produto principal
+                <select id="comboMainOption"></select>
+              </label>
+              <label>Bebida
+                <select id="comboDrinkOption">
+                  <option value="Pepsi" data-extra-price="0">Pepsi</option>
+                  <option value="Cola" data-extra-price="0">Cola</option>
+                  <option value="Fanta" data-extra-price="0">Fanta</option>
+                  <option value="Ice Tea" data-extra-price="0">Ice Tea</option>
+                  <option value="Sumo natural" data-extra-price="1.5">Sumo natural (+1,50 €)</option>
+                </select>
+              </label>
+              <label>Tamanho do Açaí
+                <select id="comboAcaiSizeOption">
+                  <option value="P 250 ml" data-extra-price="0">P - 250 ml</option>
+                  <option value="M 360 ml" data-extra-price="1.5">M - 360 ml (+1,50 €)</option>
+                </select>
+              </label>
+            </div>
+            <p class="combo-quantity-note" id="comboQuantityNote"></p>
+          </section>
+          <section class="custom-option-group juice-only-group" id="juiceFlavorGroup" hidden>
+            <div class="custom-group-head"><div><strong>Sabor do sumo natural</strong><span>Escolha uma opção</span></div><b>Obrigatório</b></div>
+            <div class="custom-options" id="juiceFlavorOptions"></div>
+          </section>
+          <section class="custom-option-group" id="chantillyChoiceGroup" hidden>
+            <div class="custom-group-head"><div><strong>Chantilly</strong><span>Como deseja o batido?</span></div><b>Obrigatório</b></div>
+            <div class="custom-options" id="chantillyChoiceOptions">
+              <label class="custom-option"><input type="radio" name="chantillyChoice" value="Com chantilly"><span>Com chantilly</span></label>
+              <label class="custom-option"><input type="radio" name="chantillyChoice" value="Sem chantilly"><span>Sem chantilly</span></label>
+            </div>
+          </section>
+          <section class="custom-option-group acai-only-group" data-group="complements" data-limit="4">
+            <div class="custom-group-head"><div><strong>Complementos</strong><span>Escolha até 4</span></div><b id="complementsCount">0/4</b></div>
+            <div class="custom-options" id="complementsOptions"></div>
+          </section>
+          <section class="custom-option-group acai-only-group" data-group="fruits" data-limit="2">
+            <div class="custom-group-head"><div><strong>Frutas</strong><span>Escolha até 2</span></div><b id="fruitsCount">0/2</b></div>
+            <div class="custom-options" id="fruitsOptions"></div>
+          </section>
+          <section class="custom-option-group acai-only-group" data-group="toppings" data-limit="2">
+            <div class="custom-group-head"><div><strong>Toppings</strong><span>Escolha até 2</span></div><b id="toppingsCount">0/2</b></div>
+            <div class="custom-options" id="toppingsOptions"></div>
+          </section>
+          <section class="custom-extra-notes">
+            <label class="custom-extra-option" id="customExtraOption">
+              <input id="customProductExtra" type="checkbox" />
+              <span><strong>Adicionar extra</strong><small>Acrescenta 1,00 € ao produto</small></span>
+              <b>+1,00 €</b>
+            </label>
+            <label class="custom-comment-field">Comentário do produto
+              <textarea id="customProductComment" maxlength="240" placeholder="Ex.: sem cebola, bem passado, separar ingredientes…"></textarea>
+            </label>
+          </section>
+        </div>
+        <footer class="acai-custom-actions">
+          <button class="custom-cancel" id="cancelAcaiCustomization" type="button">Cancelar</button>
+          <button class="custom-confirm" type="submit">Adicionar ao pedido</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <dialog class="table-account-dialog" id="tableAccountDialog">
+      <header><div><span>Conta em aberto</span><strong id="tableAccountTitle">Mesa 0</strong></div><button id="closeTableAccountButton" type="button" aria-label="Fechar">×</button></header>
+      <div class="table-account-summary"><span>Pedidos ativos <strong id="tableOrderCount">0</strong></span><span>Total consumido <strong id="tableAccountTotal">0,00 €</strong></span></div>
+      <div class="table-account-orders" id="tableAccountOrders"></div>
+      <section class="table-transfer-box">
+        <label>Transferir todo o consumo para
+          <select id="transferDestination"></select>
+        </label>
+        <button id="confirmTableTransferButton" type="button">Transferir consumo</button>
+      </section>
+      <section class="table-payment-box">
+        <div class="table-payment-title"><span>Itens selecionados <button id="toggleAllPaymentItems" type="button">Selecionar todos</button></span><strong id="tablePaymentDue">0,00 €</strong></div>
+        <label id="tablePaymentMethodField">Forma de pagamento
+          <select id="tablePaymentMethod"><option value="">Escolher…</option><option value="cash">DINHEIRO</option><option value="multibanco">MULTIBANCO</option><option value="mbway">MB WAY</option><option value="account">CONTA</option></select>
+        </label>
+        <label class="mixed-payment-toggle"><input id="mixedPaymentToggle" type="checkbox" /><span>Usar mais de uma forma de pagamento</span></label>
+        <div class="mixed-payment-fields" id="mixedPaymentFields" hidden>
+          <label>DINHEIRO<input data-payment-part="cash" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00" /></label>
+          <label>MULTIBANCO<input data-payment-part="multibanco" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00" /></label>
+          <label>MB WAY<input data-payment-part="mbway" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00" /></label>
+          <label>CONTA<input data-payment-part="account" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00" /></label>
+          <div class="mixed-payment-summary"><span>Total distribuído <strong id="mixedPaymentTotal">0,00 €</strong></span><span>Falta distribuir <strong id="mixedPaymentRemaining">0,00 €</strong></span></div>
+        </div>
+        <label id="tableCashReceivedField" hidden>Valor recebido
+          <div class="cash-payment-input"><input id="tableCashReceived" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00" /><span>€</span></div>
+        </label>
+        <div class="table-change-result" id="tableChangeResult" hidden><span>Troco</span><strong id="tableChangeAmount">0,00 €</strong></div>
+      </section>
+      <p class="dialog-message" id="tableAccountMessage"></p>
+      <footer><button class="close-table-account-button" id="closeTableAccountFinalButton" type="button">Pagar itens selecionados</button><span></span><button id="continueTableButton" type="button">Continuar nesta mesa</button></footer>
+    </dialog>
+
+    <section class="auth-screen" id="authScreen">
+      <form class="auth-card auth-form" id="loginForm">
+        <img src="logo-acai.png" alt="Açaí Fast Food" />
+        <h2>Entrar no Caixa</h2><p>Usa o mesmo acesso da aplicação de funcionários.</p>
+        <label class="field">Funcionário
+          <select id="loginUserSelect"><option value="">Escolher funcionário</option></select>
+        </label>
+        <label class="field">Utilizador<input id="loginUsername" autocomplete="username" required /></label>
+        <label class="field">Senha<input id="loginPassword" type="password" autocomplete="current-password" required /></label>
+        <button class="primary-action" type="submit">Entrar</button>
+        <p class="form-status" id="loginStatus"></p>
+      </form>
+    </section>
+    <div class="toast" id="toast" hidden></div>
+    <script src="menu-data.js"></script>
+    <script src="pedidos.js"></script>
+  </body>
+</html>

@@ -5,3 +5,6 @@ app-users.json
 faturacao-records.json
 invoice-records.json
 invoice-files/
+menu-items.json
+order-records.json
+stock-state.json

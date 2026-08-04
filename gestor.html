@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest-gestor.json" />
     <link rel="icon" href="icon-gestor-192.png" type="image/png" />
     <link rel="apple-touch-icon" href="icon-gestor-512.png" />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260804-pingo-semanal" />
   </head>
   <body class="app-mobile-shell manager-app">
     <header class="app-header app-header-modern">
@@ -55,7 +55,6 @@
           <button class="sidebar-button" data-view-target="funcionarios" type="button">Funcionarios</button>
           <button class="sidebar-button" data-view-target="ponto" type="button">Ponto</button>
           <button class="sidebar-button" data-view-target="inventario" type="button">Inventario</button>
-          <button class="sidebar-button" data-view-target="movimentos" type="button">Movimentos</button>
           <button class="sidebar-button" data-view-target="registos" type="button">Histórico Contagens</button>
           <button class="sidebar-button" data-view-target="atividades" type="button">Atividades</button>
           <button class="sidebar-button" data-view-target="notion" type="button">Notion Gestão</button>
@@ -67,7 +66,7 @@
               <div>
                 <p class="eyebrow">Dashboard</p>
                 <h2>Operação em tempo real</h2>
-                <p class="panel-subtitle">Estoque, produção, movimentos e faturação do dia.</p>
+                <p class="panel-subtitle">Estoque, produção, contagens e faturação do dia.</p>
               </div>
               <button class="button primary" data-dashboard-action="estoque" type="button">Lançar Estoque</button>
             </div>
@@ -600,14 +599,6 @@
         </section>
       </section>
 
-      <section class="panel movement-panel manager-view" data-view="movimentos" hidden>
-        <div class="panel-heading">
-          <h2>Movimentos recentes</h2>
-          <button class="button ghost" id="clearMovementsButton" type="button">Limpar historico</button>
-        </div>
-        <div id="movementList" class="movement-list"></div>
-      </section>
-
       <section class="panel count-record-panel manager-view" data-view="registos" hidden>
         <div class="panel-heading">
           <div>
@@ -750,35 +741,6 @@
       </nav>
     </main>
 
-    <dialog id="movementDialog">
-      <form id="movementForm" method="dialog">
-        <div class="panel-heading">
-          <h2 id="movementTitle">Movimento</h2>
-          <button class="icon-button" value="cancel" type="submit" title="Fechar">x</button>
-        </div>
-        <input id="movementItemId" type="hidden" />
-        <label>
-          Tipo
-          <select id="movementType">
-            <option value="in">Entrada</option>
-            <option value="out">Saida</option>
-          </select>
-        </label>
-        <label>
-          Quantidade
-          <input id="movementQuantity" type="number" min="0.01" step="0.01" required />
-        </label>
-        <label>
-          Motivo
-          <input id="movementReason" type="text" placeholder="Compra, venda, perda, ajuste..." />
-        </label>
-        <div class="dialog-actions">
-          <button class="button ghost" value="cancel" type="submit">Cancelar</button>
-          <button class="button primary" id="applyMovementButton" value="default" type="submit">Aplicar</button>
-        </div>
-      </form>
-    </dialog>
-
     <template id="rowTemplate">
       <tr>
         <td>
@@ -792,7 +754,6 @@
         <td><span class="status-pill" data-field="status"></span></td>
         <td>
           <div class="row-actions">
-            <button class="icon-button" data-action="move" type="button">+/-</button>
             <button class="icon-button" data-action="edit" type="button">Editar</button>
             <button class="icon-button danger" data-action="delete" type="button">Apagar</button>
           </div>
@@ -800,7 +761,7 @@
       </tr>
     </template>
 
-    <script src="app-ui.js"></script>
-    <script src="gestor.js"></script>
+    <script src="app-ui.js?v=20260804-pingo-semanal"></script>
+    <script src="gestor.js?v=20260804-pingo-semanal"></script>
   </body>
 </html>

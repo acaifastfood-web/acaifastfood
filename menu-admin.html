@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="pt-PT">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gestão do Menu | Açaí Fast Food</title>
+    <meta name="theme-color" content="#171717" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="menu-admin.css" />
+  </head>
+  <body>
+    <header class="admin-topbar">
+      <a class="admin-brand" href="index.html" aria-label="Voltar à central de aplicações">
+        <img src="logo-acai.png" alt="" />
+        <span><strong>Açaí Fast Food</strong><small>Gestão do menu</small></span>
+      </a>
+      <nav class="quick-links" aria-label="Aplicações">
+        <a href="pedidos.html">Abrir Caixa</a>
+        <a href="kds.html">Abrir KDS</a>
+        <button id="logoutButton" type="button">Sair</button>
+      </nav>
+    </header>
+
+    <main class="admin-shell">
+      <section class="page-heading">
+        <div><p class="eyebrow">Catálogo de vendas</p><h1>Produtos</h1><p>Edite preços, categorias e disponibilidade do menu do Caixa.</p></div>
+        <button class="primary-button" id="newProductButton" type="button"><span>＋</span> Novo produto</button>
+      </section>
+
+      <nav class="section-tabs" aria-label="Secções do menu">
+        <button class="active" data-view="products" type="button">Produtos <span id="productCount">0</span></button>
+        <button data-view="categories" type="button">Categorias <span id="categoryCount">0</span></button>
+      </nav>
+
+      <section class="summary-grid" aria-label="Resumo do menu">
+        <article><span>Total de produtos</span><strong id="totalProducts">0</strong></article>
+        <article><span>À venda</span><strong id="activeProducts">0</strong></article>
+        <article><span>Ocultos no Caixa</span><strong id="inactiveProducts">0</strong></article>
+        <article><span>Preço médio</span><strong id="averagePrice">0,00 €</strong></article>
+      </section>
+
+      <section class="catalog-card" id="productsView">
+        <div class="toolbar">
+          <label class="search-field"><span>⌕</span><input id="productSearch" type="search" placeholder="Pesquisar produto, código ou descrição" /></label>
+          <select id="categoryFilter" aria-label="Filtrar por categoria"><option value="">Todas as categorias</option></select>
+          <select id="centerFilter" aria-label="Filtrar por centro de produção"><option value="">Todos os centros</option><option>Balcão</option><option>Cozinha</option><option>Açaí</option></select>
+          <select id="statusFilter" aria-label="Filtrar por estado"><option value="">Todos os estados</option><option value="active">À venda</option><option value="inactive">Ocultos</option></select>
+          <button class="secondary-button" id="exportButton" type="button">Exportar CSV</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Produto</th><th>Código</th><th>Categoria</th><th>Centro</th><th>À venda</th><th>Preço</th><th><span class="sr-only">Ações</span></th></tr></thead>
+            <tbody id="productTableBody"></tbody>
+          </table>
+          <div class="empty-state" id="emptyState" hidden><strong>Nenhum produto encontrado</strong><span>Altere os filtros ou acrescente um novo produto.</span></div>
+        </div>
+        <footer class="table-footer"><span id="resultCount">0 produtos</span><span>As alterações ficam disponíveis no Caixa após guardar.</span></footer>
+      </section>
+
+      <section class="catalog-card categories-view" id="categoriesView" hidden>
+        <div class="category-heading"><div><h2>Categorias do menu</h2><p>Resumo automático dos produtos cadastrados.</p></div><button class="primary-button" id="newCategoryProductButton" type="button">＋ Produto numa categoria</button></div>
+        <div class="category-list" id="categoryList"></div>
+      </section>
+    </main>
+
+    <dialog id="productDialog" class="product-dialog">
+      <form id="productForm" method="dialog">
+        <header><div><p class="eyebrow" id="dialogEyebrow">Novo produto</p><h2 id="dialogTitle">Acrescentar ao menu</h2></div><button class="icon-button" id="closeDialogButton" type="button" aria-label="Fechar">×</button></header>
+        <div class="form-grid">
+          <label class="wide"><span>Nome do produto *</span><input id="productName" name="name" required maxlength="100" placeholder="Ex.: Pastel de frango" /></label>
+          <label><span>Preço de venda *</span><div class="money-input"><input id="productPrice" name="price" required min="0" step="0.01" type="number" inputmode="decimal" /><b>€</b></div></label>
+          <label><span>Código</span><input id="productCode" name="code" maxlength="30" placeholder="Ex.: 1042" /></label>
+          <label><span>Categoria *</span><input id="productCategory" name="category" list="categoryOptions" required maxlength="60" placeholder="Escolher ou escrever" /><datalist id="categoryOptions"></datalist></label>
+          <label><span>Centro de produção *</span><select id="productCenter" name="productionCenter" required><option>Balcão</option><option>Cozinha</option><option>Açaí</option></select></label>
+          <label><span>Ícone</span><input id="productIcon" name="icon" maxlength="8" placeholder="🥣" /></label>
+          <label class="wide"><span>Descrição / variação</span><textarea id="productVariant" name="variant" maxlength="240" rows="3" placeholder="Tamanho, ingredientes incluídos ou informação útil para o Caixa"></textarea></label>
+          <label class="toggle-row wide"><input id="productActive" name="active" type="checkbox" checked /><span><strong>Produto à venda</strong><small>Quando desligado, fica guardado mas não aparece no Caixa.</small></span></label>
+        </div>
+        <p class="form-message" id="formMessage" aria-live="polite"></p>
+        <footer><button class="danger-button" id="deleteProductButton" type="button" hidden>Eliminar produto</button><span></span><button class="secondary-button" id="cancelDialogButton" type="button">Cancelar</button><button class="primary-button" id="saveProductButton" type="submit">Guardar produto</button></footer>
+      </form>
+    </dialog>
+
+    <section class="auth-overlay" id="authOverlay" hidden>
+      <form class="login-card" id="loginForm">
+        <img src="logo-acai.png" alt="Açaí Fast Food" />
+        <p class="eyebrow">Acesso da gestão</p><h2>Gestão do Menu</h2><p>Entre com um utilizador Gestor para editar os produtos.</p>
+        <label><span>Utilizador</span><input id="loginUsername" autocomplete="username" required /></label>
+        <label><span>Senha</span><input id="loginPassword" type="password" autocomplete="current-password" required /></label>
+        <p class="form-message" id="loginMessage"></p>
+        <button class="primary-button" type="submit">Entrar</button>
+        <a href="index.html">Voltar às aplicações</a>
+      </form>
+    </section>
+
+    <div class="toast" id="toast" hidden></div>
+    <script src="menu-data.js"></script>
+    <script src="menu-admin.js"></script>
+  </body>
+</html>

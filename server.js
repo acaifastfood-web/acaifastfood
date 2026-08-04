@@ -37,7 +37,10 @@ ensureDataDir();
 const COUNT_RECORDS_PATH = path.join(DATA_DIR, "count-records.json");
 const TIME_RECORDS_PATH = path.join(DATA_DIR, "time-records.json");
 const REVENUE_RECORDS_PATH = path.join(DATA_DIR, "faturacao-records.json");
+const ORDER_RECORDS_PATH = path.join(DATA_DIR, "order-records.json");
+const MENU_ITEMS_PATH = path.join(DATA_DIR, "menu-items.json");
 const INVOICE_RECORDS_PATH = path.join(DATA_DIR, "invoice-records.json");
+const STOCK_STATE_PATH = path.join(DATA_DIR, "stock-state.json");
 const INVOICE_FILES_DIR = path.join(DATA_DIR, "invoice-files");
 const USERS_PATH = path.join(DATA_DIR, "app-users.json");
 const MAX_INVOICE_FILE_BYTES = 8 * 1024 * 1024;
@@ -223,6 +226,14 @@ http
         return await handleNotionSync(request, response);
       }
 
+      if (requestPath === "/api/stock-state" && request.method === "GET") {
+        return handleStockState(response);
+      }
+
+      if (requestPath === "/api/stock-state/save" && request.method === "POST") {
+        return await handleSaveStockState(request, response);
+      }
+
       if (requestPath === "/api/auth/login" && request.method === "POST") {
         return await handleLogin(request, response);
       }
@@ -233,6 +244,66 @@ http
 
       if (requestPath === "/api/auth/logout" && request.method === "POST") {
         return await handleLogout(request, response);
+      }
+
+      if (requestPath === "/api/orders/list" && request.method === "POST") {
+        return await handleOrderList(request, response);
+      }
+
+      if (requestPath === "/api/orders/create" && request.method === "POST") {
+        return await handleCreateOrder(request, response);
+      }
+
+      if (requestPath === "/api/orders/status" && request.method === "POST") {
+        return await handleOrderStatus(request, response);
+      }
+
+      if (requestPath === "/api/orders/items" && request.method === "POST") {
+        return await handleOrderItems(request, response);
+      }
+
+      if (requestPath === "/api/orders/cancel" && request.method === "POST") {
+        return await handleCancelOrder(request, response);
+      }
+
+      if (requestPath === "/api/orders/restore" && request.method === "POST") {
+        return await handleRestoreOrder(request, response);
+      }
+
+      if (requestPath === "/api/orders/transfer-table" && request.method === "POST") {
+        return await handleTransferTable(request, response);
+      }
+
+      if (requestPath === "/api/tables/list" && request.method === "POST") {
+        return await handleTableAccountsList(request, response);
+      }
+
+      if (requestPath === "/api/tables/close" && request.method === "POST") {
+        return await handleCloseTableAccount(request, response);
+      }
+
+      if (requestPath === "/api/tables/pay-items" && request.method === "POST") {
+        return await handlePayTableItems(request, response);
+      }
+
+      if (requestPath === "/api/menu/list" && request.method === "POST") {
+        return await handleMenuList(request, response);
+      }
+
+      if (requestPath === "/api/menu/initialize" && request.method === "POST") {
+        return await handleInitializeMenu(request, response);
+      }
+
+      if (requestPath === "/api/menu/save" && request.method === "POST") {
+        return await handleSaveMenuItem(request, response);
+      }
+
+      if (requestPath === "/api/menu/delete" && request.method === "POST") {
+        return await handleDeleteMenuItem(request, response);
+      }
+
+      if (requestPath === "/api/menu/toggle" && request.method === "POST") {
+        return await handleToggleMenuItem(request, response);
       }
 
       if (requestPath === "/api/users" && request.method === "GET") {
@@ -330,9 +401,8 @@ http
 
 async function handleLogin(request, response) {
   const body = await readJson(request);
-  const username = normalizeUsername(body.username);
   const password = String(body.password || "");
-  const user = readUsers().find((entry) => entry.username === username);
+  const user = findUserForLogin(body.username);
 
   if (!user || user.active === false || !verifyPassword(password, user)) {
     return sendJson(response, 401, { error: "Utilizador ou senha invalidos." });
@@ -365,6 +435,415 @@ async function handleLogout(request, response) {
   const body = await readJson(request);
   if (body.authToken) sessions.delete(String(body.authToken));
   return sendJson(response, 200, { ok: true });
+}
+
+async function handleOrderList(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+
+  const requestedDate = normalizeDate(body.date || "");
+  const activeOnly = body.activeOnly === true;
+  let orders = readOrderRecords();
+  if (requestedDate) orders = orders.filter((order) => order.businessDate === requestedDate);
+  if (activeOnly) orders = orders.filter((order) => !["delivered", "cancelled"].includes(order.status));
+  return sendJson(response, 200, { orders, serverTime: new Date().toISOString() });
+}
+
+async function handleCreateOrder(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+
+  const items = normalizeOrderItems(expandComboItems(body.items));
+  if (!items.length) return sendJson(response, 400, { error: "Adiciona pelo menos um produto ao pedido." });
+
+  const tableNumber = tableNumberFromLabel(body.table);
+  const paymentMethod = tableNumber ? "" : normalizePaymentMethod(body.paymentMethod);
+  const orderTotal = roundMoney(items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0));
+  const cashReceived = paymentMethod === "cash" ? moneyValue(body.cashReceived) : 0;
+  if (!tableNumber && !paymentMethod) return sendJson(response, 400, { error: "Escolhe a forma de pagamento." });
+  if (paymentMethod === "cash" && cashReceived < orderTotal) return sendJson(response, 400, { error: "O valor recebido em dinheiro e inferior ao total do pedido." });
+
+  const orders = readOrderRecords();
+  const now = new Date().toISOString();
+  const businessDate = todayDateText();
+  const order = normalizeOrderRecord({
+    id: crypto.randomUUID(),
+    number: nextOrderNumber(orders, businessDate),
+    businessDate,
+    channel: normalizeOrderChannel(body.channel),
+    customerName: String(body.customerName || "").trim().slice(0, 80),
+    table: String(body.table || "").trim().slice(0, 30),
+    notes: String(body.notes || "").trim().slice(0, 500),
+    paymentStatus: tableNumber ? "pending" : "paid",
+    paymentMethod,
+    cashReceived,
+    changeDue: paymentMethod === "cash" ? roundMoney(cashReceived - orderTotal) : 0,
+    items,
+    status: "new",
+    createdBy: session.name,
+    createdByUsername: session.username,
+    createdAt: now,
+    updatedAt: now,
+    statusHistory: [{ status: "new", label: "Novo", by: session.name, at: now }],
+  });
+  if (!tableNumber) order.items.forEach((item) => { item.paidQuantity = item.quantity; });
+  orders.unshift(order);
+  writeOrderRecords(orders);
+  return sendJson(response, 201, { order });
+}
+
+async function handleOrderStatus(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+
+  const status = normalizeOrderStatus(body.status);
+  if (!status || status === "cancelled") return sendJson(response, 400, { error: "Estado do pedido invalido." });
+  const orders = readOrderRecords();
+  const order = orders.find((entry) => entry.id === String(body.orderId || ""));
+  if (!order) return sendJson(response, 404, { error: "Pedido nao encontrado." });
+  if (order.status === "cancelled") return sendJson(response, 409, { error: "O pedido esta cancelado." });
+
+  const now = new Date().toISOString();
+  order.status = status;
+  order.updatedAt = now;
+  if (["ready", "delivered"].includes(status)) {
+    order.items.forEach((item) => {
+      if (item.itemStatus !== "cancelled") item.itemStatus = "ready";
+    });
+  }
+  order.statusHistory.push({ status, label: orderStatusLabel(status), by: session.name, at: now });
+  writeOrderRecords(orders);
+  return sendJson(response, 200, { order });
+}
+
+async function handleOrderItems(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+
+  const action = normalizeOrderItemStatus(body.action);
+  const itemIds = Array.isArray(body.itemIds) ? [...new Set(body.itemIds.map(String))] : [];
+  if (!action || !itemIds.length) return sendJson(response, 400, { error: "Seleciona pelo menos um produto." });
+
+  const orders = readOrderRecords();
+  const order = orders.find((entry) => entry.id === String(body.orderId || ""));
+  if (!order) return sendJson(response, 404, { error: "Pedido nao encontrado." });
+  if (["delivered", "cancelled"].includes(order.status)) return sendJson(response, 409, { error: "Este pedido ja foi encerrado." });
+
+  let changed = 0;
+  order.items.forEach((item) => {
+    if (itemIds.includes(item.id)) {
+      item.itemStatus = action;
+      changed += 1;
+    }
+  });
+  if (!changed) return sendJson(response, 404, { error: "Os produtos selecionados nao foram encontrados." });
+
+  const now = new Date().toISOString();
+  const activeItems = order.items.filter((item) => item.itemStatus !== "cancelled");
+  if (!activeItems.length) order.status = "cancelled";
+  else if (activeItems.every((item) => item.itemStatus === "ready")) order.status = "delivered";
+  else if (order.status === "new") order.status = "preparing";
+  order.updatedAt = now;
+  order.statusHistory.push({
+    status: order.status,
+    label: action === "ready" ? `${changed} produto(s) pronto(s)` : `${changed} produto(s) cancelado(s)`,
+    by: session.name,
+    at: now,
+  });
+  writeOrderRecords(orders);
+  return sendJson(response, 200, { order, changed });
+}
+
+async function handleCancelOrder(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+
+  const orders = readOrderRecords();
+  const order = orders.find((entry) => entry.id === String(body.orderId || ""));
+  if (!order) return sendJson(response, 404, { error: "Pedido nao encontrado." });
+  if (order.status === "delivered") return sendJson(response, 409, { error: "Um pedido entregue nao pode ser cancelado." });
+
+  const now = new Date().toISOString();
+  order.status = "cancelled";
+  order.cancelReason = String(body.reason || "Cancelado pelo operador").trim().slice(0, 240);
+  order.cancelledAt = now;
+  order.cancelledBy = session.name;
+  order.updatedAt = now;
+  order.statusHistory.push({ status: "cancelled", label: "Cancelado", by: session.name, at: now });
+  writeOrderRecords(orders);
+  return sendJson(response, 200, { order });
+}
+
+async function handleRestoreOrder(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+
+  const orders = readOrderRecords();
+  const order = orders.find((entry) => entry.id === String(body.orderId || ""));
+  if (!order) return sendJson(response, 404, { error: "Pedido nao encontrado." });
+  if (order.status !== "cancelled") return sendJson(response, 409, { error: "Este pedido nao esta apagado." });
+
+  const now = new Date().toISOString();
+  order.items.forEach((item) => { item.itemStatus = "pending"; });
+  order.status = "new";
+  order.restoredAt = now;
+  order.restoredBy = session.name;
+  order.updatedAt = now;
+  order.statusHistory.push({ status: "new", label: "Restaurado", by: session.name, at: now });
+  writeOrderRecords(orders);
+  return sendJson(response, 200, { order });
+}
+
+async function handleTransferTable(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+
+  const fromTable = normalizeTableNumber(body.fromTable);
+  const toTable = normalizeTableNumber(body.toTable);
+  if (!fromTable || !toTable) return sendJson(response, 400, { error: "Indica uma mesa de origem e uma mesa de destino validas." });
+  if (fromTable === toTable) return sendJson(response, 400, { error: "Escolhe uma mesa de destino diferente." });
+
+  const orders = readOrderRecords();
+  const movedOrders = orders.filter((order) => order.businessDate === todayDateText() && order.status !== "cancelled" && !order.tableClosedAt && tableNumberFromLabel(order.table) === fromTable);
+  if (!movedOrders.length) return sendJson(response, 404, { error: `A Mesa ${fromTable} nao tem consumo ativo.` });
+
+  const now = new Date().toISOString();
+  for (const order of movedOrders) {
+    order.table = `Mesa ${toTable}`;
+    order.updatedAt = now;
+    order.statusHistory.push({ status: order.status, label: `Transferido da Mesa ${fromTable} para Mesa ${toTable}`, by: session.name, at: now });
+  }
+  writeOrderRecords(orders);
+  return sendJson(response, 200, {
+    ok: true,
+    fromTable,
+    toTable,
+    movedCount: movedOrders.length,
+    total: roundMoney(movedOrders.reduce((sum, order) => sum + order.total, 0)),
+    orders: movedOrders,
+  });
+}
+
+async function handleTableAccountsList(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+  const businessDate = normalizeDate(body.date) || todayDateText();
+  const orders = readOrderRecords().filter((order) => order.businessDate === businessDate && order.status !== "cancelled" && !order.tableClosedAt && tableNumberFromLabel(order.table));
+  return sendJson(response, 200, { orders, businessDate, serverTime: new Date().toISOString() });
+}
+
+async function handleCloseTableAccount(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+  const tableNumber = normalizeTableNumber(body.tableNumber);
+  if (!tableNumber) return sendJson(response, 400, { error: "Seleciona uma mesa valida." });
+  const orders = readOrderRecords();
+  const closing = orders.filter((order) => order.businessDate === todayDateText() && order.status !== "cancelled" && !order.tableClosedAt && tableNumberFromLabel(order.table) === tableNumber);
+  if (!closing.length) return sendJson(response, 404, { error: `A Mesa ${tableNumber} nao tem conta em aberto.` });
+  const paymentMethod = normalizePaymentMethod(body.paymentMethod);
+  if (!paymentMethod) return sendJson(response, 400, { error: "Escolhe a forma de pagamento antes de encerrar a conta." });
+  const total = roundMoney(closing.reduce((sum, order) => sum + order.total, 0));
+  const cashReceived = paymentMethod === "cash" ? moneyValue(body.cashReceived) : 0;
+  if (paymentMethod === "cash" && cashReceived < total) return sendJson(response, 400, { error: "O valor recebido em dinheiro e inferior ao total da conta." });
+  const changeDue = paymentMethod === "cash" ? roundMoney(cashReceived - total) : 0;
+  const now = new Date().toISOString();
+  const settlementId = crypto.randomUUID();
+  for (const order of closing) {
+    order.items.filter((item) => item.itemStatus !== "cancelled").forEach((item) => { item.paidQuantity = item.quantity; });
+    order.tableClosedAt = now;
+    order.tableClosedBy = session.name;
+    order.paymentStatus = "paid";
+    order.paymentMethod = paymentMethod;
+    order.settlement = { id: settlementId, method: paymentMethod, total, cashReceived, changeDue, paidAt: now, paidBy: session.name };
+    order.updatedAt = now;
+    order.statusHistory.push({ status: order.status, label: `Conta da Mesa ${tableNumber} paga em ${paymentMethodLabel(paymentMethod)}`, by: session.name, at: now });
+  }
+  writeOrderRecords(orders);
+  return sendJson(response, 200, { ok: true, tableNumber, orderCount: closing.length, total, paymentMethod, paymentMethodLabel: paymentMethodLabel(paymentMethod), cashReceived, changeDue, settlementId });
+}
+
+async function handlePayTableItems(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+  const tableNumber = normalizeTableNumber(body.tableNumber);
+  if (!tableNumber) return sendJson(response, 400, { error: "Seleciona uma mesa valida." });
+  const selectedKeys = new Set((Array.isArray(body.items) ? body.items : []).map((item) => `${String(item.orderId || "")}:${String(item.itemId || "")}`));
+  if (!selectedKeys.size) return sendJson(response, 400, { error: "Seleciona pelo menos um item para pagar." });
+  const orders = readOrderRecords();
+  const accountOrders = orders.filter((order) => order.businessDate === todayDateText() && order.status !== "cancelled" && !order.tableClosedAt && tableNumberFromLabel(order.table) === tableNumber);
+  if (!accountOrders.length) return sendJson(response, 404, { error: `A Mesa ${tableNumber} nao tem conta em aberto.` });
+  const selectedItems = [];
+  for (const order of accountOrders) {
+    for (const item of order.items) {
+      const remainingQuantity = Math.max(0, item.quantity - Number(item.paidQuantity || 0));
+      if (remainingQuantity && item.itemStatus !== "cancelled" && selectedKeys.has(`${order.id}:${item.id}`)) selectedItems.push({ order, item, remainingQuantity });
+    }
+  }
+  if (!selectedItems.length) return sendJson(response, 400, { error: "Os itens selecionados ja foram pagos ou nao estao disponiveis." });
+  const total = roundMoney(selectedItems.reduce((sum, entry) => sum + entry.remainingQuantity * entry.item.unitPrice, 0));
+  const requestedParts = Array.isArray(body.paymentParts) && body.paymentParts.length
+    ? body.paymentParts
+    : [{ method: body.paymentMethod, amount: total, cashReceived: body.cashReceived }];
+  const parts = requestedParts.map((part) => ({ method: normalizePaymentMethod(part.method), amount: moneyValue(part.amount), cashReceived: moneyValue(part.cashReceived) })).filter((part) => part.method && part.amount > 0);
+  if (!parts.length) return sendJson(response, 400, { error: "Escolhe pelo menos uma forma de pagamento." });
+  if (new Set(parts.map((part) => part.method)).size !== parts.length) return sendJson(response, 400, { error: "Cada forma de pagamento deve aparecer apenas uma vez." });
+  const distributedTotal = roundMoney(parts.reduce((sum, part) => sum + part.amount, 0));
+  if (Math.abs(distributedTotal - total) > 0.009) return sendJson(response, 400, { error: `Distribui exatamente ${total.toFixed(2)} EUR entre as formas de pagamento.` });
+  const invalidCash = parts.find((part) => part.method === "cash" && part.cashReceived < part.amount);
+  if (invalidCash) return sendJson(response, 400, { error: "O valor recebido em DINHEIRO e inferior a parcela em DINHEIRO." });
+  const now = new Date().toISOString();
+  const payments = parts.map((part) => ({ id: crypto.randomUUID(), method: part.method, total: part.amount, cashReceived: part.method === "cash" ? part.cashReceived : 0, changeDue: part.method === "cash" ? roundMoney(part.cashReceived - part.amount) : 0, paidAt: now, paidBy: session.name, methodLabel: paymentMethodLabel(part.method) }));
+  const paymentLabel = payments.length > 1 ? "PAGAMENTO MISTO" : payments[0].methodLabel;
+  for (const entry of selectedItems) entry.item.paidQuantity = entry.item.quantity;
+  for (const order of accountOrders) {
+    const itemIds = selectedItems.filter((entry) => entry.order.id === order.id).map((entry) => entry.item.id);
+    if (itemIds.length) order.payments.push(...payments.map((payment) => ({ ...payment, itemIds })));
+    const payableItems = order.items.filter((item) => item.itemStatus !== "cancelled");
+    order.paymentStatus = payableItems.every((item) => Number(item.paidQuantity || 0) >= item.quantity) ? "paid" : "pending";
+    order.paymentMethod = order.paymentStatus === "paid" ? payments[0].method : order.paymentMethod;
+    order.updatedAt = now;
+    if (itemIds.length) order.statusHistory.push({ status: order.status, label: `${itemIds.length} item(ns) pago(s) em ${paymentLabel}`, by: session.name, at: now });
+  }
+  const remainingTotal = roundMoney(accountOrders.reduce((sum, order) => sum + order.items.filter((item) => item.itemStatus !== "cancelled").reduce((itemSum, item) => itemSum + Math.max(0, item.quantity - Number(item.paidQuantity || 0)) * item.unitPrice, 0), 0));
+  const tableClosed = remainingTotal === 0;
+  if (tableClosed) {
+    for (const order of accountOrders) {
+      order.tableClosedAt = now;
+      order.tableClosedBy = session.name;
+      order.statusHistory.push({ status: order.status, label: `Conta da Mesa ${tableNumber} integralmente paga`, by: session.name, at: now });
+    }
+  }
+  writeOrderRecords(orders);
+  const totalChange = roundMoney(payments.reduce((sum, payment) => sum + payment.changeDue, 0));
+  return sendJson(response, 200, { ok: true, tableNumber, payment: { method: payments.length > 1 ? "mixed" : payments[0].method, methodLabel: paymentLabel, total, changeDue: totalChange }, payments, paidItemCount: selectedItems.length, remainingTotal, tableClosed, orders: accountOrders });
+}
+
+function normalizeTableNumber(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 1 && number <= 50 ? number : 0;
+}
+
+function tableNumberFromLabel(value) {
+  const match = String(value || "").match(/mesa\s*(\d+)/i);
+  return match ? normalizeTableNumber(match[1]) : 0;
+}
+
+function normalizePaymentMethod(value) {
+  const method = String(value || "").trim().toLowerCase();
+  return ["cash", "multibanco", "mbway", "account"].includes(method) ? method : "";
+}
+
+function paymentMethodLabel(method) {
+  return { cash: "DINHEIRO", multibanco: "MULTIBANCO", mbway: "MB WAY", account: "CONTA" }[normalizePaymentMethod(method)] || "";
+}
+
+async function handleMenuList(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+  return sendJson(response, 200, { items: readMenuItems() });
+}
+
+async function handleInitializeMenu(request, response) {
+  const body = await readJson(request, 2_000_000);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+  if (!isMenuManager(session)) return sendJson(response, 403, { error: "Apenas a gestao pode alterar o menu." });
+  const existing = readMenuItems();
+  if (existing.length) return sendJson(response, 200, { items: existing, initialized: false });
+  const items = Array.isArray(body.items) ? body.items.map(normalizeMenuItem).filter((item) => item.name) : [];
+  if (!items.length) return sendJson(response, 400, { error: "Nao existem produtos para inicializar o menu." });
+  writeMenuItems(items);
+  return sendJson(response, 201, { items, initialized: true });
+}
+
+async function handleSaveMenuItem(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+  if (!isMenuManager(session)) return sendJson(response, 403, { error: "Apenas a gestao pode alterar o menu." });
+  const rawItem = body.item || {};
+  if (!String(rawItem.name || "").trim()) return sendJson(response, 400, { error: "Indica o nome do produto." });
+  if (!String(rawItem.category || "").trim()) return sendJson(response, 400, { error: "Indica a categoria do produto." });
+  const items = readMenuItems();
+  const existingIndex = items.findIndex((item) => item.id === String(rawItem.id || ""));
+  const previous = existingIndex >= 0 ? items[existingIndex] : null;
+  const item = normalizeMenuItem({ ...previous, ...rawItem, id: previous?.id || rawItem.id || crypto.randomUUID(), createdAt: previous?.createdAt, updatedAt: new Date().toISOString() });
+  if (existingIndex >= 0) items[existingIndex] = item;
+  else items.push(item);
+  writeMenuItems(items);
+  return sendJson(response, existingIndex >= 0 ? 200 : 201, { item, items });
+}
+
+async function handleDeleteMenuItem(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+  if (!isMenuManager(session)) return sendJson(response, 403, { error: "Apenas a gestao pode alterar o menu." });
+  const items = readMenuItems();
+  const filtered = items.filter((item) => item.id !== String(body.itemId || ""));
+  if (filtered.length === items.length) return sendJson(response, 404, { error: "Produto nao encontrado." });
+  writeMenuItems(filtered);
+  return sendJson(response, 200, { ok: true, items: filtered });
+}
+
+async function handleToggleMenuItem(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+  if (!isMenuManager(session)) return sendJson(response, 403, { error: "Apenas a gestao pode alterar o menu." });
+  const items = readMenuItems();
+  const item = items.find((entry) => entry.id === String(body.itemId || ""));
+  if (!item) return sendJson(response, 404, { error: "Produto nao encontrado." });
+  item.active = body.active !== false;
+  item.updatedAt = new Date().toISOString();
+  writeMenuItems(items);
+  return sendJson(response, 200, { item, items });
+}
+
+function isMenuManager(session) {
+  return ["manager", "admin"].includes(normalizeRole(session?.role));
+}
+
+function normalizeMenuItem(rawItem) {
+  const now = new Date().toISOString();
+  return {
+    id: String(rawItem.id || crypto.randomUUID()),
+    code: String(rawItem.code || "").trim().slice(0, 30),
+    name: String(rawItem.name || "").trim().slice(0, 100),
+    category: String(rawItem.category || "Sem categoria").trim().slice(0, 60),
+    variant: String(rawItem.variant || "").trim().slice(0, 240),
+    price: Math.max(0, moneyValue(rawItem.price)),
+    icon: String(rawItem.icon || "•").trim().slice(0, 8) || "•",
+    productionCenter: ["Balcão", "Cozinha", "Açaí"].includes(rawItem.productionCenter) ? rawItem.productionCenter : "Cozinha",
+    active: rawItem.active !== false,
+    createdAt: rawItem.createdAt || now,
+    updatedAt: rawItem.updatedAt || now,
+  };
+}
+
+function readMenuItems() {
+  try {
+    if (!fs.existsSync(MENU_ITEMS_PATH)) return [];
+    const items = JSON.parse(fs.readFileSync(MENU_ITEMS_PATH, "utf8"));
+    return Array.isArray(items) ? items.map(normalizeMenuItem).filter((item) => item.name) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeMenuItems(items) {
+  fs.writeFileSync(MENU_ITEMS_PATH, JSON.stringify(items.map(normalizeMenuItem), null, 2));
 }
 
 async function handleCountRecords(request, response) {
@@ -727,6 +1206,31 @@ async function handleListDatabases(response) {
   }
 }
 
+function handleStockState(response) {
+  return sendJson(response, 200, readStockState());
+}
+
+async function handleSaveStockState(request, response) {
+  try {
+    const body = await readJson(request, 2_000_000);
+    const session = getSession(body.authToken);
+    if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+
+    const items = Array.isArray(body.items) ? body.items : [];
+    if (!items.length) return sendJson(response, 400, { error: "Nao ha produtos para atualizar." });
+
+    const state = writeStockState(items, {
+      source: "count",
+      updatedBy: session.name,
+      updatedByUsername: session.username,
+      updatedBySector: session.sector,
+    });
+    return sendJson(response, 200, state);
+  } catch (error) {
+    return sendJson(response, 400, { error: error.message || "Nao foi possivel atualizar o estoque no servidor." });
+  }
+}
+
 async function handleNotionItems(response) {
   try {
     if (!isNotionConfigured()) {
@@ -745,10 +1249,12 @@ async function handleNotionItems(response) {
 
     const pages = await queryDataSourcePages(dataSourceRef.id);
     const items = pages.map((page) => pageToItem(page, properties, titleProperty.name)).filter((item) => item.name.trim());
+    const stockState = safeWriteStockState(items, { source: "notion", databaseTitle: dataSourceRef.title });
 
     return sendJson(response, 200, {
       items,
       databaseTitle: dataSourceRef.title,
+      stockUpdatedAt: stockState?.updatedAt || "",
     });
   } catch (error) {
     return sendJson(response, 400, { error: friendlyNotionError(error.message) });
@@ -815,6 +1321,13 @@ async function handleNotionSync(request, response) {
       appendCountRecord(builtCountRecord);
       countSync = await syncCountRecordToNotionSafe(builtCountRecord);
     }
+    const stockState = safeWriteStockState(items, {
+      source: countRecord ? "count-sync" : "notion-sync",
+      updatedBy: session?.name || "",
+      updatedByUsername: session?.username || "",
+      updatedBySector: session?.sector || "",
+      databaseTitle: dataSourceRef.title,
+    });
 
     return sendJson(response, 200, {
       created,
@@ -822,6 +1335,7 @@ async function handleNotionSync(request, response) {
       databaseTitle: dataSourceRef.title,
       skippedProperties: Array.from(skippedProperties).sort(),
       countSync,
+      stockUpdatedAt: stockState?.updatedAt || "",
     });
   } catch (error) {
     return sendJson(response, 400, { error: friendlyNotionError(error.message) });
@@ -2504,6 +3018,17 @@ function normalizeUsername(value) {
     .replace(/[^a-z0-9._-]+/g, ".");
 }
 
+function findUserForLogin(value) {
+  const raw = String(value || "").trim();
+  const username = normalizeUsername(raw);
+  const nameKey = normalizeTextKey(raw);
+  return readUsers().find((entry) => (
+    entry.username === username ||
+    normalizeUsername(entry.name) === username ||
+    normalizeTextKey(entry.name) === nameKey
+  ));
+}
+
 function normalizeTextKey(value) {
   return String(value || "")
     .trim()
@@ -2640,6 +3165,59 @@ function writeCountRecords(records) {
   fs.writeFileSync(COUNT_RECORDS_PATH, JSON.stringify(records, null, 2));
 }
 
+function readStockState() {
+  try {
+    if (!fs.existsSync(STOCK_STATE_PATH)) {
+      return { items: [], updatedAt: "", source: "empty", itemCount: 0 };
+    }
+    const state = JSON.parse(fs.readFileSync(STOCK_STATE_PATH, "utf8"));
+    const items = normalizeStockStateItems(state.items);
+    return {
+      items,
+      updatedAt: String(state.updatedAt || ""),
+      source: String(state.source || "server"),
+      updatedBy: String(state.updatedBy || ""),
+      updatedByUsername: String(state.updatedByUsername || ""),
+      updatedBySector: String(state.updatedBySector || ""),
+      databaseTitle: String(state.databaseTitle || ""),
+      itemCount: items.length,
+    };
+  } catch {
+    return { items: [], updatedAt: "", source: "error", itemCount: 0 };
+  }
+}
+
+function safeWriteStockState(items, meta = {}) {
+  try {
+    return writeStockState(items, meta);
+  } catch {
+    return null;
+  }
+}
+
+function writeStockState(items, meta = {}) {
+  const normalizedItems = normalizeStockStateItems(items);
+  const state = {
+    updatedAt: new Date().toISOString(),
+    source: String(meta.source || "server"),
+    updatedBy: String(meta.updatedBy || ""),
+    updatedByUsername: String(meta.updatedByUsername || ""),
+    updatedBySector: String(meta.updatedBySector || ""),
+    databaseTitle: String(meta.databaseTitle || ""),
+    itemCount: normalizedItems.length,
+    items: normalizedItems,
+  };
+  fs.writeFileSync(STOCK_STATE_PATH, JSON.stringify(state, null, 2));
+  return state;
+}
+
+function normalizeStockStateItems(items) {
+  return (Array.isArray(items) ? items : [])
+    .filter((item) => item && typeof item === "object")
+    .map(normalizeItem)
+    .filter((item) => item.name.trim());
+}
+
 function readTimeRecords() {
   try {
     if (!fs.existsSync(TIME_RECORDS_PATH)) return [];
@@ -2660,6 +3238,188 @@ function readTimeRecords() {
 
 function writeTimeRecords(records) {
   fs.writeFileSync(TIME_RECORDS_PATH, JSON.stringify(records.slice(0, 1000), null, 2));
+}
+
+function readOrderRecords() {
+  try {
+    if (!fs.existsSync(ORDER_RECORDS_PATH)) return [];
+    const records = JSON.parse(fs.readFileSync(ORDER_RECORDS_PATH, "utf8"));
+    if (!Array.isArray(records)) return [];
+    return records.map(normalizeOrderRecord).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  } catch {
+    return [];
+  }
+}
+
+function writeOrderRecords(records) {
+  fs.writeFileSync(ORDER_RECORDS_PATH, JSON.stringify(records.slice(0, 2000), null, 2));
+}
+
+function normalizeOrderRecord(record) {
+  const now = new Date().toISOString();
+  const items = normalizeOrderItems(record.items);
+  const subtotal = roundMoney(items.reduce((total, item) => total + item.quantity * item.unitPrice, 0));
+  return {
+    id: String(record.id || crypto.randomUUID()),
+    number: Math.max(1, Number(record.number || 1)),
+    businessDate: normalizeDate(record.businessDate) || todayDateText(),
+    channel: normalizeOrderChannel(record.channel),
+    customerName: String(record.customerName || "").trim().slice(0, 80),
+    table: String(record.table || "").trim().slice(0, 30),
+    notes: String(record.notes || "").trim().slice(0, 500),
+    items,
+    subtotal,
+    total: subtotal,
+    paymentStatus: record.paymentStatus === "pending" ? "pending" : "paid",
+    paymentMethod: normalizePaymentMethod(record.paymentMethod),
+    cashReceived: moneyValue(record.cashReceived),
+    changeDue: moneyValue(record.changeDue),
+    settlement: normalizeOrderSettlement(record.settlement),
+    payments: normalizeOrderPayments(record.payments),
+    status: normalizeOrderStatus(record.status) || "new",
+    cancelReason: String(record.cancelReason || "").trim().slice(0, 240),
+    cancelledAt: validIsoDate(record.cancelledAt) || "",
+    cancelledBy: String(record.cancelledBy || "").trim().slice(0, 100),
+    restoredAt: validIsoDate(record.restoredAt) || "",
+    restoredBy: String(record.restoredBy || "").trim().slice(0, 100),
+    tableClosedAt: validIsoDate(record.tableClosedAt) || "",
+    tableClosedBy: String(record.tableClosedBy || "").trim().slice(0, 100),
+    createdBy: String(record.createdBy || "Operador"),
+    createdByUsername: String(record.createdByUsername || ""),
+    createdAt: validIsoDate(record.createdAt) || now,
+    updatedAt: validIsoDate(record.updatedAt) || validIsoDate(record.createdAt) || now,
+    statusHistory: Array.isArray(record.statusHistory)
+      ? record.statusHistory.map((entry) => ({
+          status: normalizeOrderStatus(entry.status) || "new",
+          label: String(entry.label || orderStatusLabel(entry.status)),
+          by: String(entry.by || "Operador"),
+          at: validIsoDate(entry.at) || now,
+        }))
+      : [],
+  };
+}
+
+function normalizeOrderSettlement(value) {
+  if (!value || typeof value !== "object") return null;
+  const method = normalizePaymentMethod(value.method);
+  if (!method) return null;
+  return {
+    id: String(value.id || ""),
+    method,
+    total: moneyValue(value.total),
+    cashReceived: moneyValue(value.cashReceived),
+    changeDue: moneyValue(value.changeDue),
+    paidAt: validIsoDate(value.paidAt) || "",
+    paidBy: String(value.paidBy || "").trim().slice(0, 100),
+  };
+}
+
+function normalizeOrderPayments(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((payment) => ({
+    id: String(payment.id || ""), method: normalizePaymentMethod(payment.method), total: moneyValue(payment.total),
+    cashReceived: moneyValue(payment.cashReceived), changeDue: moneyValue(payment.changeDue), paidAt: validIsoDate(payment.paidAt) || "",
+    paidBy: String(payment.paidBy || "").trim().slice(0, 100), itemIds: Array.isArray(payment.itemIds) ? payment.itemIds.map(String).slice(0, 60) : [],
+  })).filter((payment) => payment.method);
+}
+
+function normalizeOrderItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .slice(0, 60)
+    .map((item) => ({
+      id: String(item.id || crypto.randomUUID()),
+      productId: String(item.productId || "").slice(0, 80),
+      name: String(item.name || "Produto").trim().slice(0, 100),
+      variant: String(item.variant || "").trim().slice(0, 80),
+      modifiers: Array.isArray(item.modifiers) ? item.modifiers.map((value) => String(value).trim().slice(0, 80)).filter(Boolean).slice(0, 12) : [],
+      productionCenter: forcedProductionCenter(item) || normalizeProductionCenter(item.productionCenter) || inferProductionCenter(item),
+      productionCenters: forcedProductionCenter(item)
+        ? [forcedProductionCenter(item)]
+        : normalizeProductionCenters(item.productionCenters, normalizeProductionCenter(item.productionCenter) || inferProductionCenter(item)),
+      itemStatus: normalizeOrderItemStatus(item.itemStatus) || "pending",
+      paidQuantity: Math.min(Math.max(1, Math.round(Number(item.quantity || 1))), Math.max(0, Math.round(Number(item.paidQuantity || 0)))),
+      notes: String(item.notes || "").trim().slice(0, 240),
+      quantity: Math.min(99, Math.max(1, Math.round(Number(item.quantity || 1)))),
+      unitPrice: roundMoney(Math.max(0, Number(item.unitPrice || 0))),
+    }))
+    .filter((item) => item.name && Number.isFinite(item.unitPrice));
+}
+
+function expandComboItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items.flatMap((item) => {
+    if (!Array.isArray(item.components) || !item.components.length) return [item];
+    const parentQuantity = Math.min(99, Math.max(1, Math.round(Number(item.quantity || 1))));
+    const parentUnitPrice = roundMoney(Math.max(0, Number(item.unitPrice || 0)));
+    return item.components.map((component, index) => {
+      const componentQuantity = Math.min(99, Math.max(1, Math.round(Number(component.quantity || 1))));
+      return {
+        ...component,
+        id: String(component.id || crypto.randomUUID()),
+        productId: String(component.productId || `${item.productId || "combo"}-component-${index + 1}`),
+        variant: String(component.variant || item.name || "Combo"),
+        quantity: Math.min(99, parentQuantity * componentQuantity),
+        unitPrice: index === 0 ? roundMoney(parentUnitPrice / componentQuantity) : 0,
+        notes: String(component.notes || item.notes || ""),
+      };
+    });
+  });
+}
+
+function nextOrderNumber(orders, businessDate) {
+  const numbers = orders.filter((order) => order.businessDate === businessDate).map((order) => Number(order.number || 0));
+  return Math.max(0, ...numbers) + 1;
+}
+
+function normalizeProductionCenter(value) {
+  const center = normalizeTextKey(value);
+  if (center === "balcao") return "Balcão";
+  if (center === "cozinha") return "Cozinha";
+  if (center === "acai") return "Açaí";
+  return "";
+}
+
+function normalizeProductionCenters(values, fallback) {
+  const centers = Array.isArray(values) ? values.map(normalizeProductionCenter).filter(Boolean) : [];
+  if (!centers.length && fallback) centers.push(fallback);
+  return [...new Set(centers)];
+}
+
+function normalizeOrderItemStatus(value) {
+  const status = String(value || "").toLowerCase();
+  return ["pending", "ready", "cancelled"].includes(status) ? status : "";
+}
+
+function inferProductionCenter(item) {
+  const text = normalizeTextKey(`${item.productId || ""} ${item.name || ""}`);
+  if (/batido|sumo natural/.test(text)) return "Açaí";
+  if (/agua|coca|sumo|bebida/.test(text)) return "Balcão";
+  if (/tapioca|wrap|pao|salgado/.test(text)) return "Cozinha";
+  return "Açaí";
+}
+
+function forcedProductionCenter(item) {
+  const text = normalizeTextKey(`${item.productId || ""} ${item.name || ""}`);
+  return /batido|sumo natural/.test(text) ? "Açaí" : "";
+}
+
+function normalizeOrderStatus(value) {
+  const status = String(value || "").toLowerCase();
+  return ["new", "preparing", "ready", "delivered", "cancelled"].includes(status) ? status : "";
+}
+
+function orderStatusLabel(status) {
+  return { new: "Novo", preparing: "Em preparação", ready: "Pronto", delivered: "Entregue", cancelled: "Cancelado" }[normalizeOrderStatus(status)] || "Novo";
+}
+
+function normalizeOrderChannel(value) {
+  const channel = String(value || "").toLowerCase();
+  return ["counter", "takeaway", "delivery"].includes(channel) ? channel : "counter";
+}
+
+function roundMoney(value) {
+  return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 }
 
 function normalizeTimeRecord(record) {

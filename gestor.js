@@ -4,6 +4,7 @@ const PURCHASE_SELECTION_KEY = "acai-fast-food-purchase-selection-v1";
 const ACTIVITIES_KEY = "acai-fast-food-activities-v1";
 const ACTIVITIES_SEED_KEY = "acai-fast-food-activities-seed-2026-07-01";
 const EXPIRING_DAYS = 7;
+const STOCK_REFRESH_INTERVAL_MS = 8000;
 const REQUIRED_CONTROL_TYPES = ["Diário", "Semanal", "Controle da Sala", "Inventário Diário Sala", "Inventário Semanal Sala"];
 const DEFAULT_NOTION_MANAGEMENT_DASHBOARD_URL = "https://app.notion.com/p/Dashboard-Gest-o-397643c289174f3886e28b17f737329d?source=copy_link";
 const CONTROL_TYPE_OPTION_OVERRIDES = [
@@ -145,6 +146,8 @@ let countHistoryEntries = [];
 let selectedCountProduct = "";
 let activities = load(ACTIVITIES_KEY, []).map(normalizeActivity);
 let appLinks = {};
+let stockStateUpdatedAt = "";
+let stockRefreshTimer = null;
 
 const elements = {
   form: document.querySelector("#itemForm"),
@@ -245,13 +248,6 @@ const elements = {
   clearPurchasesButton: document.querySelector("#clearPurchasesButton"),
   copyPurchasesButton: document.querySelector("#copyPurchasesButton"),
   movementList: document.querySelector("#movementList"),
-  movementDialog: document.querySelector("#movementDialog"),
-  movementForm: document.querySelector("#movementForm"),
-  movementTitle: document.querySelector("#movementTitle"),
-  movementItemId: document.querySelector("#movementItemId"),
-  movementType: document.querySelector("#movementType"),
-  movementQuantity: document.querySelector("#movementQuantity"),
-  movementReason: document.querySelector("#movementReason"),
   templateButton: document.querySelector("#templateButton"),
   pullButton: document.querySelector("#pullButton"),
   syncButton: document.querySelector("#syncButton"),
@@ -329,13 +325,12 @@ elements.purchaseList.addEventListener("change", handlePurchaseSelection);
 elements.selectAllPurchasesButton.addEventListener("click", selectAllPurchases);
 elements.clearPurchasesButton.addEventListener("click", clearPurchaseSelection);
 elements.copyPurchasesButton.addEventListener("click", copySelectedPurchases);
-elements.movementForm.addEventListener("submit", applyMovement);
 elements.templateButton.addEventListener("click", downloadCsvTemplate);
 elements.pullButton.addEventListener("click", pullFromNotion);
 elements.syncButton.addEventListener("click", syncWithNotion);
 elements.exportButton.addEventListener("click", exportData);
 elements.importFile.addEventListener("change", importData);
-elements.clearMovementsButton.addEventListener("click", clearMovements);
+elements.clearMovementsButton?.addEventListener("click", clearMovements);
 elements.refreshCountRecordsButton.addEventListener("click", fetchCountRecords);
 elements.countHistoryMode.addEventListener("change", renderCountHistory);
 elements.countFilterProduct.addEventListener("input", renderCountHistory);
@@ -368,6 +363,7 @@ resetRevenueForm();
 resetInvoiceForm();
 
 setManagerView("resumo");
+startStockAutoRefresh();
 
 function setManagerView(viewName) {
   elements.managerViews.forEach((view) => {
@@ -378,6 +374,33 @@ function setManagerView(viewName) {
   });
   updateModuleActions(viewName);
   if (viewName === "notion") renderNotionDashboard();
+}
+
+function startStockAutoRefresh() {
+  fetchStockState({ silent: true });
+  if (stockRefreshTimer) clearInterval(stockRefreshTimer);
+  stockRefreshTimer = setInterval(() => fetchStockState({ silent: true }), STOCK_REFRESH_INTERVAL_MS);
+}
+
+async function fetchStockState(options = {}) {
+  try {
+    const response = await fetch("/api/stock-state");
+    const state = await response.json();
+    if (!response.ok) throw new Error(state.error || "Falha ao atualizar estoque.");
+    if (!Array.isArray(state.items) || state.items.length === 0) return;
+    if (state.updatedAt && state.updatedAt === stockStateUpdatedAt) return;
+
+    stockStateUpdatedAt = state.updatedAt || new Date().toISOString();
+    items = state.items.map(normalizeItem);
+    persist();
+    render();
+    if (elements.notionMasterDashboard && !elements.notionMasterDashboard.closest("[data-view]")?.hidden) {
+      renderNotionDashboard();
+    }
+    if (!options.silent) setSyncStatus("Estoque atualizado pelo servidor.", "success");
+  } catch (error) {
+    if (!options.silent) setSyncStatus(error.message || "Nao foi possivel atualizar estoque.", "error");
+  }
 }
 
 function updateModuleActions(viewName) {
@@ -446,7 +469,6 @@ function handleTableAction(event) {
 
   if (button.dataset.action === "edit") fillForm(item);
   if (button.dataset.action === "delete") deleteItem(item);
-  if (button.dataset.action === "move") openMovement(item);
 }
 
 function deleteItem(item) {
@@ -484,45 +506,6 @@ function resetForm() {
   elements.formTitle.textContent = "Novo item";
   setField("category", "Ingredientes");
   setField("unit", "kg");
-}
-
-function openMovement(item) {
-  elements.movementItemId.value = item.id;
-  elements.movementTitle.textContent = `Movimento: ${item.name}`;
-  elements.movementType.value = "in";
-  elements.movementQuantity.value = "";
-  elements.movementReason.value = "";
-  elements.movementDialog.showModal();
-}
-
-function applyMovement(event) {
-  event.preventDefault();
-  const item = items.find((entry) => entry.id === elements.movementItemId.value);
-  if (!item) return;
-
-  const quantity = numberValue(elements.movementQuantity.value);
-  const type = elements.movementType.value;
-  if (quantity <= 0) return;
-
-  const nextQuantity = type === "in" ? item.quantity + quantity : Math.max(0, item.quantity - quantity);
-  item.quantity = roundQuantity(nextQuantity);
-  item.updatedAt = new Date().toISOString();
-
-  movements.unshift({
-    id: crypto.randomUUID(),
-    itemId: item.id,
-    itemName: item.name,
-    type,
-    quantity,
-    unit: item.unit,
-    reason: elements.movementReason.value.trim(),
-    createdAt: new Date().toISOString(),
-  });
-  movements = movements.slice(0, 80);
-
-  persist();
-  elements.movementDialog.close();
-  render();
 }
 
 function render() {
@@ -844,7 +827,7 @@ function handleManagerDashboardAction(event) {
   if (action === "notion") return setManagerView("notion");
   if (action === "funcionarios") return setManagerView("funcionarios");
   if (action === "registos") return setManagerView("registos");
-  if (action === "producao" || action === "movimentos") return setManagerView("movimentos");
+  if (action === "producao") return setManagerView("registos");
   if (action === "pedidos") return setManagerView("pedidos");
   if (action === "consulta") {
     setManagerView("inventario");
@@ -1126,7 +1109,9 @@ function topMovedProducts(todayMovements) {
 }
 
 function criticalRatio(item) {
-  const minimum = Math.max(numberValue(item.minimum), numberValue(item.dailyMinimum), 1);
+  const minimum = isPingoDoceItem(item)
+    ? Math.max(numberValue(item.minimum), 1)
+    : Math.max(numberValue(item.minimum), numberValue(item.dailyMinimum), 1);
   return numberValue(item.quantity) / minimum;
 }
 
@@ -1790,12 +1775,7 @@ function renderTable() {
     row.querySelector('[data-field="name"]').textContent = item.name;
     row.querySelector('[data-field="meta"]').textContent = [item.category, item.supplier, item.orderDay].filter(Boolean).join(" | ");
     row.querySelector('[data-field="quantity"]').textContent = `${formatNumber(item.quantity)} ${item.unit}`;
-    row.querySelector('[data-field="minimum"]').innerHTML = `
-      <strong>${formatNumber(item.dailyMinimum)} ${escapeHtml(item.unit)}</strong>
-      <span>diario</span>
-      <strong>${formatNumber(item.minimum)} ${escapeHtml(item.unit)}</strong>
-      <span>semanal</span>
-    `;
+    row.querySelector('[data-field="minimum"]').innerHTML = renderMinimumSummary(item);
     row.querySelector('[data-field="controlType"]').textContent = controlTypeDisplay(item.controlType);
     row.querySelector('[data-field="expiresAt"]').textContent = formatDate(item.expiresAt);
     const pill = row.querySelector('[data-field="status"]');
@@ -1803,6 +1783,22 @@ function renderTable() {
     pill.classList.add(status.className);
     elements.inventoryBody.appendChild(row);
   }
+}
+
+function renderMinimumSummary(item) {
+  if (isPingoDoceItem(item)) {
+    return `
+      <strong>${formatNumber(item.minimum)} ${escapeHtml(item.unit)}</strong>
+      <span>semanal</span>
+    `;
+  }
+
+  return `
+    <strong>${formatNumber(item.dailyMinimum)} ${escapeHtml(item.unit)}</strong>
+    <span>diario</span>
+    <strong>${formatNumber(item.minimum)} ${escapeHtml(item.unit)}</strong>
+    <span>semanal</span>
+  `;
 }
 
 async function fetchUsers() {
@@ -2153,6 +2149,7 @@ function renderPurchaseSuggestions() {
 }
 
 function renderMovements() {
+  if (!elements.movementList) return;
   elements.movementList.innerHTML = "";
   if (movements.length === 0) {
     elements.movementList.innerHTML = '<div class="empty-state"><h3>Sem movimentos</h3><p>Entradas, saidas e contagens aparecem aqui.</p></div>';
@@ -3025,6 +3022,14 @@ function sameControlType(left, right) {
   return normalizedLeft === normalizedRight || normalizedLeft.includes(normalizedRight) || normalizedRight.includes(normalizedLeft);
 }
 
+function isPingoDoceItem(item) {
+  return [item.name, item.supplier, item.controlType, item.orderDay, item.category].some(isPingoDoceValue);
+}
+
+function isPingoDoceValue(value) {
+  return normalizeText(value).includes("pingo doce");
+}
+
 function clearManagerFilters() {
   elements.searchInput.value = "";
   elements.statusFilter.value = "all";
@@ -3058,6 +3063,7 @@ async function pullFromNotion(options = {}) {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Falha ao carregar do Notion");
     items = result.items.map(normalizeItem);
+    stockStateUpdatedAt = result.stockUpdatedAt || stockStateUpdatedAt;
     persist();
     render();
     const database = result.databaseTitle ? ` de "${result.databaseTitle}"` : "";
@@ -3082,6 +3088,7 @@ async function syncWithNotion(options = {}) {
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Falha na sincronizacao");
+    stockStateUpdatedAt = result.stockUpdatedAt || stockStateUpdatedAt;
     const skipped = result.skippedProperties?.length ? ` Campos ignorados: ${result.skippedProperties.join(", ")}.` : "";
     const database = result.databaseTitle ? ` em "${result.databaseTitle}"` : "";
     if (!options.quietSuccess) setSyncStatus(`Notion sincronizado${database}: ${result.created} criados, ${result.updated} atualizados.${skipped}`, "success");

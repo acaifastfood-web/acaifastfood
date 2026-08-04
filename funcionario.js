@@ -46,11 +46,13 @@ const elements = {
   timeClockButtons: document.querySelectorAll("[data-time-action]"),
   loginForm: document.querySelector("#loginForm"),
   loginUserSelect: document.querySelector("#loginUserSelect"),
+  loginUsernameField: document.querySelector("#loginUsernameField"),
   loginUsername: document.querySelector("#loginUsername"),
   loginPassword: document.querySelector("#loginPassword"),
   showLoginPassword: document.querySelector("#showLoginPassword"),
   loginStatus: document.querySelector("#loginStatus"),
   currentUserName: document.querySelector("#currentUserName"),
+  countResponsible: document.querySelector("#countResponsible"),
   logoutButton: document.querySelector("#logoutButton"),
   headerLogoutButton: document.querySelector("#headerLogoutButton"),
   pullButton: document.querySelector("#pullButton"),
@@ -66,6 +68,9 @@ const elements = {
   staffCountInfo: document.querySelector("#staffCountInfo"),
   countList: document.querySelector("#countList"),
   saveCountsButton: document.querySelector("#saveCountsButton"),
+  saveCountsBottomButton: document.querySelector("#saveCountsBottomButton"),
+  countBatchBar: document.querySelector("#countBatchBar"),
+  countBatchSummary: document.querySelector("#countBatchSummary"),
 };
 
 elements.countDate.value = todayText;
@@ -81,6 +86,8 @@ elements.salaFrequencyFilter.addEventListener("change", renderCountList);
 elements.staffSearchInput.addEventListener("input", renderCountList);
 elements.clearStaffSearchButton.addEventListener("click", clearStaffSearch);
 elements.saveCountsButton.addEventListener("click", saveDailyCounts);
+elements.saveCountsBottomButton.addEventListener("click", saveDailyCounts);
+elements.countList.addEventListener("input", updatePendingCountSummary);
 elements.countList.addEventListener("change", normalizeCountField);
 elements.staffStatCards.addEventListener("click", handleStaffDashboardAction);
 elements.staffQuickActions.addEventListener("click", handleStaffDashboardAction);
@@ -104,6 +111,7 @@ async function fetchLoginUsers() {
     renderLoginUserOptions(result.users || []);
   } catch {
     elements.loginUserSelect.innerHTML = '<option value="">Digitar utilizador manualmente</option>';
+    elements.loginUsernameField.hidden = false;
   }
 }
 
@@ -136,6 +144,7 @@ function renderLoginUserOptions(users) {
   }
 
   if (currentUsername) elements.loginUserSelect.value = currentUsername;
+  elements.loginUsernameField.hidden = activeUsers.length > 0;
 }
 
 function selectLoginUser() {
@@ -150,7 +159,7 @@ function toggleLoginPasswordVisibility() {
 
 async function initializeAuth() {
   if (!auth?.token) {
-    showLogin("Entra com o teu utilizador para iniciar a contagem.");
+    showLogin("Seleciona o funcionário e usa a senha 1234 para entrar.");
     return;
   }
 
@@ -176,13 +185,14 @@ async function initializeAuth() {
 async function login(event) {
   event.preventDefault();
   elements.loginStatus.textContent = "A entrar...";
+  const username = elements.loginUserSelect.value || elements.loginUsername.value.trim();
 
   try {
     const response = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        username: elements.loginUsername.value.trim(),
+        username,
         password: elements.loginPassword.value,
       }),
     });
@@ -219,6 +229,8 @@ function showLogin(message) {
   elements.headerLogoutButton.hidden = true;
   elements.appGreeting.textContent = "Olá";
   elements.loginStatus.textContent = message || "";
+  elements.currentUserName.textContent = "";
+  elements.countResponsible.value = "";
   renderTimeClock(null);
 }
 
@@ -227,6 +239,7 @@ function showApp() {
   elements.staffPanel.hidden = false;
   const name = auth?.user?.name || auth?.user?.username || "";
   elements.currentUserName.textContent = name;
+  elements.countResponsible.value = responsibleDisplayName();
   elements.appGreeting.textContent = `Olá, ${name || "equipa"}`;
   elements.staffBottomNav.hidden = false;
   elements.headerLogoutButton.hidden = false;
@@ -235,6 +248,12 @@ function showApp() {
   renderCountList();
   renderStaffDashboard();
   fetchMyTimeRecord();
+}
+
+function responsibleDisplayName() {
+  const name = auth?.user?.name || auth?.user?.username || "";
+  const sector = auth?.user?.sector || "";
+  return [name, sector].filter(Boolean).join(" - ");
 }
 
 async function fetchMyTimeRecord() {
@@ -464,6 +483,7 @@ function renderCountList() {
     fragment.appendChild(section);
   }
   elements.countList.appendChild(fragment);
+  updatePendingCountSummary();
   renderStaffDashboard();
 }
 
@@ -480,7 +500,7 @@ function renderStaffDashboard() {
     { iconName: "stock", value: items.length, label: "Itens em estoque", description: "Base atual", tone: "purple", action: "stock" },
     { iconName: "alert", value: lowStock.length, label: "Itens críticos", description: "Abaixo do mínimo", tone: "red", action: "critical" },
     { iconName: "production", value: productionsToday, label: "Produções hoje", description: "Registos do dia", tone: "orange", action: "production" },
-    { iconName: "movement", value: todayMovements.length, label: "Movimentações hoje", description: "Contagens e ajustes", tone: "blue", action: "movements" },
+    { iconName: "movement", value: todayMovements.length, label: "Movimentações hoje", description: "Contagens do dia", tone: "blue", action: "movements" },
   ].forEach((card) => elements.staffStatCards.appendChild(AcaiUI.StatCard(card)));
 
   elements.staffCriticalList.innerHTML = "";
@@ -496,7 +516,6 @@ function renderStaffDashboard() {
   [
     { iconName: "check", label: "Lançar Estoque", tone: "purple", action: "stock" },
     { iconName: "production", label: "Nova Produção", tone: "orange", action: "production" },
-    { iconName: "movement", label: "Ajuste de Estoque", tone: "green", action: "adjust" },
     { iconName: "search", label: "Consultar Estoque", tone: "blue", action: "search" },
   ].forEach((button) => elements.staffQuickActions.appendChild(AcaiUI.QuickActionButton(button)));
 
@@ -535,7 +554,7 @@ function setStaffNav(target) {
   } else if (target === "producao") {
     handleStaffAction("production");
   } else if (target === "pedidos") {
-    handleStaffAction("critical");
+    window.location.href = "pedidos.html";
   } else {
     elements.pullButton.scrollIntoView({ behavior: "smooth", block: "center" });
   }
@@ -602,7 +621,9 @@ function topMovementProducts(todayMovements) {
 }
 
 function criticalRatio(item) {
-  const minimum = Math.max(item.minimum || 0, item.dailyMinimum || 0, 1);
+  const minimum = isPingoDoceItem(item)
+    ? Math.max(item.minimum || 0, 1)
+    : Math.max(item.minimum || 0, item.dailyMinimum || 0, 1);
   return item.quantity / minimum;
 }
 
@@ -761,19 +782,8 @@ async function saveDailyCounts() {
   }
   hideWhatsappShare();
 
-  const inputs = [...elements.countList.querySelectorAll("[data-count-id]")];
-  const expiryInputs = [...elements.countList.querySelectorAll("[data-expiry-id]")];
-  const noteInputs = [...elements.countList.querySelectorAll("[data-note-id]")];
   const countDate = elements.countDate.value || todayText;
-  const updates = inputs
-    .map((input) => ({
-      input,
-      expiryInput: expiryInputs.find((entry) => entry.dataset.expiryId === input.dataset.countId),
-      noteInput: noteInputs.find((entry) => entry.dataset.noteId === input.dataset.countId),
-      item: items.find((entry) => entry.id === input.dataset.countId),
-      value: input.value.trim(),
-    }))
-    .filter((entry) => entry.item && (entry.value !== "" || getExpiryValue(entry.expiryInput) !== entry.item.expiresAt || getNoteValue(entry.noteInput)));
+  const updates = collectPendingCountUpdates();
 
   if (updates.length === 0) {
     setSyncStatus("Nenhuma alteracao preenchida.", "warning");
@@ -822,7 +832,15 @@ async function saveDailyCounts() {
 
   persist();
   renderCountList();
-  setSyncStatus(`${updates.length} alteracoes guardadas. A enviar ao Notion...`, "warning");
+  updatePendingCountSummary();
+  setSyncStatus(`${updates.length} alteracoes guardadas. A atualizar gestor...`, "warning");
+
+  try {
+    await saveStockStateSnapshot();
+    setSyncStatus(`${updates.length} alteracoes guardadas. Gestor atualizado; a enviar ao Notion...`, "warning");
+  } catch {
+    setSyncStatus(`${updates.length} alteracoes guardadas nesta app. Gestor pode precisar atualizar manualmente. A enviar ao Notion...`, "warning");
+  }
 
   try {
     const response = await fetch("/api/notion/sync", {
@@ -845,6 +863,46 @@ async function saveDailyCounts() {
     setSyncStatus(error.message || "Contagens guardadas nesta app, mas nao sincronizadas.", "error");
     renderWhatsappShare(buildWhatsappMessage(countDate, countedItems));
   }
+}
+
+function collectPendingCountUpdates() {
+  const inputs = [...elements.countList.querySelectorAll("[data-count-id]")];
+  const expiryInputs = [...elements.countList.querySelectorAll("[data-expiry-id]")];
+  const noteInputs = [...elements.countList.querySelectorAll("[data-note-id]")];
+  return inputs
+    .map((input) => ({
+      input,
+      expiryInput: expiryInputs.find((entry) => entry.dataset.expiryId === input.dataset.countId),
+      noteInput: noteInputs.find((entry) => entry.dataset.noteId === input.dataset.countId),
+      item: items.find((entry) => entry.id === input.dataset.countId),
+      value: input.value.trim(),
+    }))
+    .filter((entry) => entry.item && (entry.value !== "" || getExpiryValue(entry.expiryInput) !== entry.item.expiresAt || getNoteValue(entry.noteInput)));
+}
+
+function updatePendingCountSummary() {
+  const pendingCount = collectPendingCountUpdates().length;
+  const hasPending = pendingCount > 0;
+  const text = pendingCount === 1 ? "1 item por guardar" : `${pendingCount} itens por guardar`;
+
+  elements.saveCountsButton.disabled = !hasPending;
+  elements.saveCountsButton.textContent = hasPending ? `Guardar tudo (${pendingCount})` : "Guardar tudo";
+  elements.saveCountsBottomButton.disabled = !hasPending;
+  elements.saveCountsBottomButton.textContent = hasPending ? `Guardar tudo (${pendingCount})` : "Guardar tudo";
+  elements.countBatchSummary.textContent = text;
+  elements.countBatchBar.hidden = !hasPending;
+}
+
+async function saveStockStateSnapshot() {
+  if (!auth?.token) return null;
+  const response = await fetch("/api/stock-state/save", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ authToken: auth.token, items }),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "Falha ao atualizar o gestor.");
+  return result;
 }
 
 function renderWhatsappShare(message) {
@@ -973,18 +1031,19 @@ function splitControlTypes(value) {
 
 function showsDailyMinimum(item) {
   const selectedControl = elements.controlTypeFilter.value;
+  if (isPingoDoceControl(selectedControl) || isPingoDoceItem(item)) return false;
   if (selectedControl === "Controle da Sala") return true;
   if (
     sameControlType(selectedControl, "Diário") ||
-    sameControlType(selectedControl, "Inventário Diário Sala") ||
-    sameControlType(selectedControl, "Pingo Doce Quinta")
+    sameControlType(selectedControl, "Inventário Diário Sala")
   ) return true;
   if (sameControlType(selectedControl, "Semanal") || sameControlType(selectedControl, "Inventário Semanal Sala")) return false;
-  return hasControlType(item, "diario") || hasControlType(item, "pingo doce quinta") || hasControlType(item, "controle da sala");
+  return hasControlType(item, "diario") || hasControlType(item, "controle da sala");
 }
 
 function showsWeeklyMinimum(item) {
   const selectedControl = elements.controlTypeFilter.value;
+  if (isPingoDoceControl(selectedControl) || isPingoDoceItem(item)) return true;
   if (selectedControl === "Controle da Sala") return true;
   if (sameControlType(selectedControl, "Pingo Doce Quinta")) return true;
   if (sameControlType(selectedControl, "Semanal") || sameControlType(selectedControl, "Inventário Semanal Sala")) return true;
@@ -993,6 +1052,14 @@ function showsWeeklyMinimum(item) {
     sameControlType(selectedControl, "Inventário Diário Sala")
   ) return false;
   return hasControlType(item, "semanal") || hasControlType(item, "controle da sala") || hasControlType(item, "pingo doce quinta");
+}
+
+function isPingoDoceItem(item) {
+  return [item.supplier, item.controlType, item.orderDay, item.category].some(isPingoDoceControl);
+}
+
+function isPingoDoceControl(value) {
+  return normalizeControlType(value).includes("pingo doce");
 }
 
 function hasControlType(item, expected) {
@@ -1051,6 +1118,7 @@ function normalizeCountField(event) {
   const input = event.target.closest("[data-count-id]");
   if (!input || input.value.trim() === "") return;
   input.value = String(wholeQuantity(input.value));
+  updatePendingCountSummary();
 }
 
 function numberValue(value) {

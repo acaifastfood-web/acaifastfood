@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="pt-PT">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KDS Cozinha | Açaí Fast Food</title>
+    <meta name="theme-color" content="#171419" />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="orders.css" />
+  </head>
+  <body class="kds-body">
+    <header class="kds-topbar">
+      <div class="kds-brand"><img src="logo-acai.png" alt="Açaí Fast Food" /><div><strong>KDS Monitor</strong><span>Cozinha · <b id="operatorName">Sem sessão</b></span></div></div>
+      <nav class="kds-center-nav" aria-label="Centro de produção">
+        <button class="active" data-center-filter="all" type="button">Todos</button>
+        <button data-center-filter="Balcão" type="button">Balcão</button>
+        <button data-center-filter="Cozinha" type="button">Cozinha</button>
+        <button data-center-filter="Açaí" type="button">Açaí</button>
+      </nav>
+      <div class="kds-inline-summary">
+        <span>Pedidos ativos <strong id="activeCount">0</strong></span>
+        <span>Tempo médio <strong id="averageTime">0 min</strong></span>
+      </div>
+      <div class="kds-top-actions">
+        <div class="kds-clock"><strong id="currentClock">00:00</strong><span id="currentDate">--/--/----</span></div>
+        <button class="kds-icon-button restore-orders-button" id="restoreOrdersButton" title="Restaurar pedidos apagados" type="button">Restaurar</button>
+        <a class="kds-icon-button" href="pedidos.html" title="Abrir Caixa" aria-label="Abrir Caixa">Caixa</a>
+        <button class="kds-icon-button" id="refreshButton" title="Atualizar pedidos" type="button">↻</button>
+        <button class="kds-icon-button" id="logoutButton" title="Sair" type="button">Sair</button>
+      </div>
+    </header>
+
+    <main class="kds-monitor" id="kdsBoard">
+      <section class="kds-ticket-grid" id="allOrders" aria-live="polite"></section>
+    </main>
+    <footer class="kds-footer"><span><i></i> Online · atualização automática</span><strong>Açaí Fast Food</strong></footer>
+
+    <dialog class="order-control-dialog" id="orderControlDialog">
+      <div class="order-control-head">
+        <div><span>Controlo do pedido</span><strong id="dialogOrderNumber">#0</strong></div>
+        <div class="dialog-live-time"><span>Tempo</span><strong id="dialogOrderTime">00:00</strong></div>
+      </div>
+      <div class="order-control-meta" id="dialogOrderMeta"></div>
+      <form id="orderItemsForm">
+        <div class="dialog-item-list" id="dialogItemList"></div>
+        <p class="dialog-message" id="dialogMessage"></p>
+        <div class="dialog-order-actions">
+          <button class="dialog-action order-cancel" id="cancelOrderButton" type="button">Cancelar pedido</button>
+          <button class="dialog-action order-back" id="closeOrderDialogButton" type="button">Voltar</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog class="restore-orders-dialog" id="restoreOrdersDialog">
+      <header class="restore-dialog-head">
+        <div><span>Histórico recuperável</span><strong>Pedidos apagados</strong></div>
+        <button id="closeRestoreDialogButton" type="button" aria-label="Fechar">×</button>
+      </header>
+      <div class="restore-orders-list" id="restoreOrdersList"></div>
+      <footer><span id="restoreOrdersMessage"></span><button id="closeRestoreDialogFooterButton" type="button">Voltar</button></footer>
+    </dialog>
+
+    <section class="auth-screen" id="authScreen">
+      <form class="auth-card auth-form" id="loginForm">
+        <img src="logo-acai.png" alt="Açaí Fast Food" /><h2>Entrar no KDS</h2><p>Identifica o operador da cozinha.</p>
+        <label class="field">Funcionário
+          <select id="loginUserSelect"><option value="">Escolher funcionário</option></select>
+        </label>
+        <label class="field">Utilizador<input id="loginUsername" autocomplete="username" required /></label>
+        <label class="field">Senha<input id="loginPassword" type="password" autocomplete="current-password" required /></label>
+        <button class="primary-action" type="submit">Entrar</button><p class="form-status" id="loginStatus"></p>
+      </form>
+    </section>
+    <div class="toast" id="toast" hidden></div>
+    <script src="kds.js"></script>
+  </body>
+</html>
