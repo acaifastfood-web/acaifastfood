@@ -810,13 +810,17 @@ async function saveDailyCounts() {
   persist();
   renderCountList();
   updatePendingCountSummary();
-  setSyncStatus(`${updates.length} alteracoes guardadas. A atualizar gestor...`, "warning");
+  setSyncStatus(`${updates.length} alteracoes guardadas. A registar no historico...`, "warning");
 
+  let savedRecord = { countDate, items: countedItems };
+  let savedOnServer = false;
   try {
-    await saveStockStateSnapshot();
-    setSyncStatus(`${updates.length} alteracoes guardadas. Gestor atualizado; a enviar ao Notion...`, "warning");
-  } catch {
-    setSyncStatus(`${updates.length} alteracoes guardadas nesta app. Gestor pode precisar atualizar manualmente. A enviar ao Notion...`, "warning");
+    const saved = await saveCountRecordSnapshot(countDate, countedItems);
+    savedRecord = saved.record || savedRecord;
+    savedOnServer = true;
+    setSyncStatus(`${updates.length} alteracoes guardadas e disponiveis no Historico de Contagens. A enviar ao Notion...`, "warning");
+  } catch (error) {
+    setSyncStatus(`${updates.length} alteracoes guardadas neste aparelho. ${error.message || "Falha ao registar no servidor."} A tentar o Notion...`, "error");
   }
 
   try {
@@ -826,18 +830,22 @@ async function saveDailyCounts() {
       body: JSON.stringify({
         authToken: auth.token,
         items,
-        countRecord: {
-          countDate,
-          items: countedItems,
-        },
+        countRecord: savedRecord,
       }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Falha na sincronizacao");
-    setSyncStatus(`${updates.length} alteracoes guardadas e sincronizadas.`, "success");
+    if (result.countSync?.configured && result.countSync.synced === false) {
+      setSyncStatus(`${updates.length} alteracoes guardadas e disponiveis no historico. Notion pendente: ${result.countSync.error || result.countSync.message || "sincronizacao nao concluida."}`, "warning");
+    } else {
+      setSyncStatus(`${updates.length} alteracoes guardadas, disponiveis no historico e sincronizadas.`, "success");
+    }
     renderWhatsappShare(buildWhatsappMessage(countDate, countedItems));
   } catch (error) {
-    setSyncStatus(error.message || "Contagens guardadas nesta app, mas nao sincronizadas.", "error");
+    const prefix = savedOnServer
+      ? `${updates.length} alteracoes guardadas e disponiveis no historico.`
+      : `${updates.length} alteracoes guardadas apenas neste aparelho.`;
+    setSyncStatus(`${prefix} Notion nao sincronizado: ${error.message || "falha desconhecida."}`, savedOnServer ? "warning" : "error");
     renderWhatsappShare(buildWhatsappMessage(countDate, countedItems));
   }
 }
@@ -870,15 +878,19 @@ function updatePendingCountSummary() {
   elements.countBatchBar.hidden = !hasPending;
 }
 
-async function saveStockStateSnapshot() {
-  if (!auth?.token) return null;
-  const response = await fetch("/api/stock-state/save", {
+async function saveCountRecordSnapshot(countDate, countedItems) {
+  if (!auth?.token) throw new Error("Sessao expirada. Faz login novamente.");
+  const response = await fetch("/api/count-records/save", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ authToken: auth.token, items }),
+    body: JSON.stringify({
+      authToken: auth.token,
+      items,
+      countRecord: { countDate, items: countedItems },
+    }),
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || "Falha ao atualizar o gestor.");
+  if (!response.ok) throw new Error(result.error || "Falha ao guardar a contagem no servidor.");
   return result;
 }
 

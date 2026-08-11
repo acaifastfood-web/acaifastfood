@@ -342,6 +342,10 @@ http
         return await handleCountRecords(request, response);
       }
 
+      if (requestPath === "/api/count-records/save" && request.method === "POST") {
+        return await handleSaveCountRecord(request, response);
+      }
+
       if (requestPath === "/api/count-records/item-status" && request.method === "POST") {
         return await handleCountRecordItemStatus(request, response);
       }
@@ -848,6 +852,7 @@ function writeMenuItems(items) {
 
 async function handleCountRecords(request, response) {
   const url = new URL(request.url, `http://localhost:${PORT}`);
+  const localOnly = ["1", "true"].includes(String(url.searchParams.get("localOnly") || "").toLowerCase());
   const filters = {
     product: normalizeTextKey(url.searchParams.get("product") || ""),
     employee: normalizeTextKey(url.searchParams.get("employee") || ""),
@@ -858,7 +863,9 @@ async function handleCountRecords(request, response) {
   };
   const session = filters.authToken ? getSession(filters.authToken) : null;
   const localRecords = readCountRecords();
-  const notionResult = await readNotionCountRecordsSafe();
+  const notionResult = localOnly
+    ? { configured: isNotionConfigured(), synced: false, skipped: true, records: [] }
+    : await readNotionCountRecordsSafe();
   const records = mergeCountRecordSources(localRecords, notionResult.records);
   let entries = flattenCountRecords(records);
 
@@ -872,9 +879,42 @@ async function handleCountRecords(request, response) {
   return sendJson(response, 200, {
     records: records.slice(0, 180),
     entries: entries.slice(0, 1200),
-    source: notionResult.configured ? "notion+local" : "local",
+    source: localOnly ? "local" : notionResult.configured ? "notion+local" : "local",
     notion: notionResult,
   });
+}
+
+async function handleSaveCountRecord(request, response) {
+  try {
+    const body = await readJson(request, 2_000_000);
+    const session = getSession(body.authToken);
+    if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+
+    const items = Array.isArray(body.items) ? body.items : [];
+    const rawRecord = body.countRecord && typeof body.countRecord === "object" ? body.countRecord : null;
+    if (!items.length) return sendJson(response, 400, { error: "Nao ha produtos para atualizar." });
+    if (!rawRecord || !Array.isArray(rawRecord.items) || rawRecord.items.length === 0) {
+      return sendJson(response, 400, { error: "Nao ha contagens preenchidas para guardar." });
+    }
+
+    const record = buildCountRecord(rawRecord, session);
+    const stockState = writeStockState(items, {
+      source: "count",
+      updatedBy: session.name,
+      updatedByUsername: session.username,
+      updatedBySector: session.sector,
+    });
+    appendCountRecord(record);
+
+    return sendJson(response, 200, {
+      ok: true,
+      record,
+      stockUpdatedAt: stockState.updatedAt,
+      itemCount: stockState.itemCount,
+    });
+  } catch (error) {
+    return sendJson(response, 400, { error: error.message || "Nao foi possivel guardar a contagem no servidor." });
+  }
 }
 
 function handleTimeRecords(request, response) {
@@ -1345,15 +1385,15 @@ async function handleNotionSync(request, response) {
 function buildCountRecord(rawRecord, session) {
   const countedItems = Array.isArray(rawRecord.items) ? rawRecord.items : [];
   return {
-    id: crypto.randomUUID(),
-    createdAt: new Date().toISOString(),
-    countDate: String(rawRecord.countDate || "").slice(0, 10),
+    id: String(rawRecord.id || "").trim() || crypto.randomUUID(),
+    createdAt: String(rawRecord.createdAt || "").trim() || new Date().toISOString(),
+    countDate: normalizeDate(rawRecord.countDate) || todayDateText(),
     employeeName: session.name,
     employeeUsername: session.username,
     employeeSector: session.sector,
     itemCount: countedItems.length,
     items: countedItems.slice(0, 300).map((item) => ({
-      id: crypto.randomUUID(),
+      id: String(item.id || "").trim() || crypto.randomUUID(),
       itemId: String(item.itemId || item.id || ""),
       name: String(item.name || "Produto sem nome"),
       quantity: numberValue(item.quantity),
@@ -3157,7 +3197,9 @@ function readCountRecords() {
 }
 
 function appendCountRecord(record) {
-  const records = [record, ...readCountRecords()].slice(0, 500);
+  const currentRecords = readCountRecords();
+  if (currentRecords.some((entry) => entry.id === record.id)) return;
+  const records = [record, ...currentRecords].slice(0, 500);
   writeCountRecords(records);
 }
 

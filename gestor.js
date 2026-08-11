@@ -4,7 +4,7 @@ const PURCHASE_SELECTION_KEY = "acai-fast-food-purchase-selection-v1";
 const ACTIVITIES_KEY = "acai-fast-food-activities-v1";
 const ACTIVITIES_SEED_KEY = "acai-fast-food-activities-seed-2026-07-01";
 const EXPIRING_DAYS = 7;
-const STOCK_REFRESH_INTERVAL_MS = 8000;
+const STOCK_REFRESH_INTERVAL_MS = 4000;
 const REQUIRED_CONTROL_TYPES = [
   "Diário Cozinha",
   "Diário Sala",
@@ -392,6 +392,7 @@ async function fetchStockState(options = {}) {
     items = state.items.map(normalizeItem);
     persist();
     render();
+    await fetchCountRecords({ silent: true, localOnly: true });
     if (elements.notionMasterDashboard && !elements.notionMasterDashboard.closest("[data-view]")?.hidden) {
       renderNotionDashboard();
     }
@@ -2170,19 +2171,31 @@ function renderMovements() {
   }
 }
 
-async function fetchCountRecords() {
-  elements.countRecordList.innerHTML = '<div class="empty-state"><h3>A carregar histórico de contagens</h3></div>';
+async function fetchCountRecords(options = {}) {
+  if (!options.silent) {
+    elements.countRecordList.innerHTML = '<div class="empty-state"><h3>A carregar histórico de contagens</h3></div>';
+  }
 
   try {
-    const response = await fetch("/api/count-records");
+    const endpoint = options.localOnly ? "/api/count-records?localOnly=1" : "/api/count-records";
+    const response = await fetch(endpoint);
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Falha ao carregar histórico de contagens.");
-    countRecords = result.records || [];
-    countHistoryEntries = Array.isArray(result.entries) ? result.entries : flattenClientCountRecords(countRecords);
+    const incomingRecords = result.records || [];
+    if (options.localOnly) {
+      const incomingIds = new Set(incomingRecords.map((record) => record.id));
+      countRecords = [...incomingRecords, ...countRecords.filter((record) => !incomingIds.has(record.id))];
+      countHistoryEntries = flattenClientCountRecords(countRecords);
+    } else {
+      countRecords = incomingRecords;
+      countHistoryEntries = Array.isArray(result.entries) ? result.entries : flattenClientCountRecords(countRecords);
+    }
     renderCountHistory();
     renderManagerDashboard();
   } catch (error) {
-    elements.countRecordList.innerHTML = `<div class="empty-state"><h3>Sem histórico</h3><p>${escapeHtml(error.message || "Nao foi possivel carregar o historico.")}</p></div>`;
+    if (!options.silent) {
+      elements.countRecordList.innerHTML = `<div class="empty-state"><h3>Sem histórico</h3><p>${escapeHtml(error.message || "Nao foi possivel carregar o historico.")}</p></div>`;
+    }
     renderManagerDashboard();
   }
 }
