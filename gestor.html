@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest-gestor.json" />
     <link rel="icon" href="icon-gestor-192.png" type="image/png" />
     <link rel="apple-touch-icon" href="icon-gestor-512.png" />
-    <link rel="stylesheet" href="styles.css?v=20260804-pingo-semanal" />
+    <link rel="stylesheet" href="styles.css?v=20260811-tipos-controle" />
   </head>
   <body class="app-mobile-shell manager-app">
     <header class="app-header app-header-modern">
@@ -514,10 +514,12 @@
               Tipo de controle
               <select id="controlType" name="controlType">
                 <option value="">Sem tipo definido</option>
-                <option value="Diário">Diário</option>
-                <option value="Semanal">Semanal</option>
-                <option value="Controle da Sala">Controle da Sala</option>
+                <option value="Diário Cozinha">Diário Cozinha</option>
+                <option value="Diário Sala">Diário Sala</option>
                 <option value="Pingo Doce Quinta">Pingo Doce Quinta</option>
+                <option value="Semanal Cozinha (Quinta e Domingo)">Semanal Cozinha (Quinta e Domingo)</option>
+                <option value="Semanal Sala (Quinta)">Semanal Sala (Quinta)</option>
+                <option value="Semanal Sala (Segunda)">Semanal Sala (Segunda)</option>
               </select>
             </label>
             <label>
@@ -558,8 +560,12 @@
               Tipo de controle
               <select id="managerControlTypeFilter">
                 <option value="all">Todos</option>
-                <option value="Diário">Diário</option>
-                <option value="Semanal">Semanal</option>
+                <option value="Diário Cozinha">Diário Cozinha</option>
+                <option value="Diário Sala">Diário Sala</option>
+                <option value="Pingo Doce Quinta">Pingo Doce Quinta</option>
+                <option value="Semanal Cozinha (Quinta e Domingo)">Semanal Cozinha (Quinta e Domingo)</option>
+                <option value="Semanal Sala (Quinta)">Semanal Sala (Quinta)</option>
+                <option value="Semanal Sala (Segunda)">Semanal Sala (Segunda)</option>
               </select>
             </label>
             <label>
@@ -761,7 +767,7 @@
       </tr>
     </template>
 
-    <script src="app-ui.js?v=20260804-pingo-semanal"></script>
-    <script src="gestor.js?v=20260804-pingo-semanal"></script>
+    <script src="app-ui.js?v=20260811-tipos-controle"></script>
+    <script src="gestor.js?v=20260811-tipos-controle"></script>
   </body>
 </html>

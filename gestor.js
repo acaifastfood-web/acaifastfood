@@ -5,24 +5,22 @@ const ACTIVITIES_KEY = "acai-fast-food-activities-v1";
 const ACTIVITIES_SEED_KEY = "acai-fast-food-activities-seed-2026-07-01";
 const EXPIRING_DAYS = 7;
 const STOCK_REFRESH_INTERVAL_MS = 8000;
-const REQUIRED_CONTROL_TYPES = ["Diário", "Semanal", "Controle da Sala", "Inventário Diário Sala", "Inventário Semanal Sala"];
-const DEFAULT_NOTION_MANAGEMENT_DASHBOARD_URL = "https://app.notion.com/p/Dashboard-Gest-o-397643c289174f3886e28b17f737329d?source=copy_link";
-const CONTROL_TYPE_OPTION_OVERRIDES = [
-  {
-    key: "sala-daily",
-    value: "Diário",
-    label: "Diário",
-    priority: 0,
-    aliases: ["Inventário Diário Sala", "Inventario Diario Sala", "Diário", "Diario"],
-  },
-  {
-    key: "sala-weekly",
-    value: "Semanal",
-    label: "Semanal",
-    priority: 1,
-    aliases: ["Inventário Semanal Sala", "Inventario Semanal Sala", "Semanal"],
-  },
+const REQUIRED_CONTROL_TYPES = [
+  "Diário Cozinha",
+  "Diário Sala",
+  "Pingo Doce Quinta",
+  "Semanal Cozinha (Quinta e Domingo)",
+  "Semanal Sala (Quinta)",
+  "Semanal Sala (Segunda)",
 ];
+const DEFAULT_NOTION_MANAGEMENT_DASHBOARD_URL = "https://app.notion.com/p/Dashboard-Gest-o-397643c289174f3886e28b17f737329d?source=copy_link";
+const CONTROL_TYPE_OPTION_OVERRIDES = REQUIRED_CONTROL_TYPES.map((label, priority) => ({
+  key: normalizeText(label),
+  value: label,
+  label,
+  priority,
+  aliases: [label],
+}));
 const NOTION_MANAGEMENT_DIVISIONS = [
   {
     id: "stock",
@@ -2914,7 +2912,8 @@ function persistPurchaseSelection() {
 }
 
 function renderControlTypeOptions() {
-  const options = uniqueControlTypeOptions([...REQUIRED_CONTROL_TYPES, ...items.flatMap((item) => splitControlTypes(item.controlType))]);
+  const options = uniqueControlTypeOptions([...REQUIRED_CONTROL_TYPES, ...items.flatMap((item) => splitControlTypes(item.controlType))])
+    .filter((option) => REQUIRED_CONTROL_TYPES.some((controlType) => normalizeText(option.value) === normalizeText(controlType)));
   populateControlTypeSelect(elements.managerControlTypeFilter, options, { all: true });
   populateControlTypeSelect(elements.controlType, options, { blank: true });
 }
@@ -2987,9 +2986,9 @@ function matchesControlTypeFilter(item, filter) {
 
 function matchesSalaFrequencyFilter(item, filter) {
   if (filter === "all") return true;
-  const frequency = filter === "weekly" ? "Semanal" : "Diário";
-  return splitControlTypes(item.controlType).some((entry) => sameControlType(entry, "Controle da Sala")) &&
-    splitControlTypes(item.controlType).some((entry) => sameControlType(entry, frequency));
+  const controlTypes = normalizeText(item.controlType);
+  const frequency = normalizeText(filter === "weekly" ? "Semanal" : "Diário");
+  return controlTypes.includes("sala") && controlTypes.includes(frequency);
 }
 
 function controlTypeDisplay(value) {

@@ -5,23 +5,21 @@ const WHATSAPP_RECIPIENTS = [
   { label: "WhatsApp 1", phone: "351913163878" },
   { label: "WhatsApp 2", phone: "351912125244" },
 ];
-const REQUIRED_CONTROL_TYPES = [];
-const CONTROL_TYPE_OPTION_OVERRIDES = [
-  {
-    key: "sala-daily",
-    value: "Diário",
-    label: "Diário",
-    priority: 0,
-    aliases: ["Inventário Diário Sala", "Inventario Diario Sala", "Diário", "Diario"],
-  },
-  {
-    key: "sala-weekly",
-    value: "Semanal",
-    label: "Semanal",
-    priority: 1,
-    aliases: ["Inventário Semanal Sala", "Inventario Semanal Sala", "Semanal"],
-  },
+const REQUIRED_CONTROL_TYPES = [
+  "Diário Cozinha",
+  "Diário Sala",
+  "Pingo Doce Quinta",
+  "Semanal Cozinha (Quinta e Domingo)",
+  "Semanal Sala (Quinta)",
+  "Semanal Sala (Segunda)",
 ];
+const CONTROL_TYPE_OPTION_OVERRIDES = REQUIRED_CONTROL_TYPES.map((label, priority) => ({
+  key: normalizeControlType(label),
+  value: label,
+  label,
+  priority,
+  aliases: [label],
+}));
 const todayText = new Date().toISOString().slice(0, 10);
 
 let items = load(STORAGE_KEY, []);
@@ -717,9 +715,8 @@ function renderControlTypeOptions() {
 }
 
 function shouldShowControlTypeOption(option) {
-  const hiddenOptions = ["Controle da Sala", "Diário", "Semanal", "Inventário Diário Sala", "Inventário Semanal Sala"];
-  return !hiddenOptions.some((hiddenOption) =>
-    sameControlType(option?.value, hiddenOption) || sameControlType(option?.label, hiddenOption)
+  return REQUIRED_CONTROL_TYPES.some((controlType) =>
+    normalizeControlType(option?.value || option?.label) === normalizeControlType(controlType)
   );
 }
 
@@ -730,8 +727,9 @@ function matchesControlTypeFilter(item, filter) {
 
 function matchesSalaFrequencyFilter(item, filter) {
   if (filter === "all") return true;
-  const frequency = filter === "weekly" ? "Semanal" : "Diário";
-  return hasControlType(item, "Controle da Sala") && hasControlType(item, frequency);
+  const controlTypes = normalizeControlType(item.controlType);
+  const frequency = normalizeControlType(filter === "weekly" ? "Semanal" : "Diário");
+  return controlTypes.includes("sala") && controlTypes.includes(frequency);
 }
 
 function uniqueControlTypeOptions(values) {
