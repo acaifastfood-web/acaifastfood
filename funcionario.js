@@ -5,7 +5,7 @@ const WHATSAPP_RECIPIENTS = [
   { label: "WhatsApp 1", phone: "351913163878" },
   { label: "WhatsApp 2", phone: "351912125244" },
 ];
-const REQUIRED_CONTROL_TYPES = ["Diário", "Semanal", "Inventário Diário Sala", "Inventário Semanal Sala"];
+const REQUIRED_CONTROL_TYPES = [];
 const CONTROL_TYPE_OPTION_OVERRIDES = [
   {
     key: "sala-daily",
@@ -717,7 +717,10 @@ function renderControlTypeOptions() {
 }
 
 function shouldShowControlTypeOption(option) {
-  return !sameControlType(option?.value, "Controle da Sala") && !sameControlType(option?.label, "Controle da Sala");
+  const hiddenOptions = ["Controle da Sala", "Diário", "Semanal", "Inventário Diário Sala", "Inventário Semanal Sala"];
+  return !hiddenOptions.some((hiddenOption) =>
+    sameControlType(option?.value, hiddenOption) || sameControlType(option?.label, hiddenOption)
+  );
 }
 
 function matchesControlTypeFilter(item, filter) {
