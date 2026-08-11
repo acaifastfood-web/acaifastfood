@@ -5,7 +5,7 @@ const WHATSAPP_RECIPIENTS = [
   { label: "WhatsApp 1", phone: "351913163878" },
   { label: "WhatsApp 2", phone: "351912125244" },
 ];
-const REQUIRED_CONTROL_TYPES = ["Diário", "Semanal", "Controle da Sala", "Inventário Diário Sala", "Inventário Semanal Sala"];
+const REQUIRED_CONTROL_TYPES = ["Diário", "Semanal", "Inventário Diário Sala", "Inventário Semanal Sala"];
 const CONTROL_TYPE_OPTION_OVERRIDES = [
   {
     key: "sala-daily",
@@ -704,15 +704,20 @@ function shouldShowItemForUserSector(item) {
 function renderControlTypeOptions() {
   const currentValue = elements.controlTypeFilter.value || "all";
   const options = uniqueControlTypeOptions([...REQUIRED_CONTROL_TYPES, ...items.flatMap((item) => splitControlTypes(item.controlType))]);
+  const visibleOptions = options.filter(shouldShowControlTypeOption);
   elements.controlTypeFilter.innerHTML = '<option value="all">Todos</option>';
-  for (const option of options) {
+  for (const option of visibleOptions) {
     const entry = document.createElement("option");
     entry.value = option.value;
     entry.textContent = option.label;
     elements.controlTypeFilter.appendChild(entry);
   }
-  const selectedOption = options.find((option) => option.value === currentValue || option.label === currentValue || sameControlType(option.value, currentValue));
+  const selectedOption = visibleOptions.find((option) => option.value === currentValue || option.label === currentValue || sameControlType(option.value, currentValue));
   elements.controlTypeFilter.value = selectedOption?.value || "all";
+}
+
+function shouldShowControlTypeOption(option) {
+  return !sameControlType(option?.value, "Controle da Sala") && !sameControlType(option?.label, "Controle da Sala");
 }
 
 function matchesControlTypeFilter(item, filter) {
