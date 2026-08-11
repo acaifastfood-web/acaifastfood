@@ -337,7 +337,6 @@ elements.countFilterSector.addEventListener("change", renderCountHistory);
 elements.countFilterSupplier.addEventListener("input", renderCountHistory);
 elements.countFilterDate.addEventListener("change", renderCountHistory);
 elements.clearCountFiltersButton.addEventListener("click", clearCountHistoryFilters);
-elements.countRecordList.addEventListener("change", handleCountRecordChange);
 elements.countRecordList.addEventListener("click", handleCountRecordClick);
 elements.activityForm.addEventListener("submit", saveActivity);
 elements.resetActivityFormButton.addEventListener("click", resetActivityForm);
@@ -2296,16 +2295,35 @@ function renderCountRecords(entries) {
     const entry = document.createElement("article");
     entry.className = "count-record";
     const items = record.items;
-    const requestedCount = items.filter((item) => item.requested).length;
+    const requestedCount = items.filter((item) => countPurchaseState(item) === "requested").length;
+    const purchasedCount = items.filter((item) => countPurchaseState(item) === "purchased").length;
     const itemRows = items
-      .map(
-        (item) => `
-          <div class="count-record-item${item.requested ? " requested" : ""}">
-            <input data-record-id="${escapeHtml(item.recordId)}" data-record-item-id="${escapeHtml(item.itemRecordId)}" type="checkbox" ${item.requested ? "checked" : ""} ${item.source === "notion" ? "disabled" : ""} />
+      .map((item) => {
+        const purchaseState = countPurchaseState(item);
+        const purchaseLabel = countPurchaseStateLabel(purchaseState);
+        const canUpdate = item.source !== "notion";
+        return `
+          <div class="count-record-item ${purchaseState}" ${canUpdate ? `data-count-status-row data-record-id="${escapeHtml(item.recordId)}" data-record-item-id="${escapeHtml(item.itemRecordId)}"` : ""}>
+            ${canUpdate
+              ? `<button class="count-status-marker ${purchaseState}" data-action="toggle-count-status" type="button" aria-expanded="false">${escapeHtml(purchaseLabel)}</button>`
+              : `<span class="count-status-marker ${purchaseState}">${escapeHtml(purchaseLabel)}</span>`}
             <span>
               <button class="link-button" data-action="show-product-history" data-product="${escapeHtml(item.productName)}" type="button">${escapeHtml(item.productName)}</button>
-              <small>${formatNumber(item.quantity)} ${escapeHtml(item.unit)} | ${escapeHtml(item.supplier || "Sem fornecedor")}${item.observation ? ` | ${escapeHtml(item.observation)}` : ""}${item.requested ? " | solicitado" : ""}</small>
+              <small>${formatNumber(item.quantity)} ${escapeHtml(item.unit)} | ${escapeHtml(item.supplier || "Sem fornecedor")}${item.observation ? ` | ${escapeHtml(item.observation)}` : ""} | ${escapeHtml(purchaseLabel)}</small>
             </span>
+            ${canUpdate ? `
+              <div class="count-item-status-editor" data-count-status-editor hidden>
+                <label>
+                  Situação do item
+                  <select data-count-purchase-state>
+                    <option value="pending" ${purchaseState === "pending" ? "selected" : ""}>Pendente</option>
+                    <option value="requested" ${purchaseState === "requested" ? "selected" : ""}>Solicitado</option>
+                    <option value="purchased" ${purchaseState === "purchased" ? "selected" : ""}>Comprado</option>
+                  </select>
+                </label>
+                <button class="button primary" data-action="save-count-item-status" type="button">Salvar</button>
+              </div>
+            ` : ""}
             ${isAdmin && item.source !== "notion" ? `
               <div class="count-record-admin">
                 <input data-edit-quantity="${escapeHtml(item.id)}" type="number" min="0" step="1" value="${escapeHtml(item.quantity)}" />
@@ -2314,8 +2332,8 @@ function renderCountRecords(entries) {
               </div>
             ` : ""}
           </div>
-        `,
-      )
+        `;
+      })
       .join("");
     entry.innerHTML = `
       <div class="count-record-head">
@@ -2326,18 +2344,12 @@ function renderCountRecords(entries) {
         <button class="button ghost" data-action="share-count-record" data-record-id="${escapeHtml(record.id)}" type="button">Abrir no Notas</button>
       </div>
       <div class="count-record-products">
-        <strong>${record.itemCount || items.length} produtos preenchidos | ${requestedCount} solicitados</strong>
+        <strong>${record.itemCount || items.length} produtos preenchidos | ${requestedCount} solicitados | ${purchasedCount} comprados</strong>
         <div class="count-record-items">${itemRows}</div>
       </div>
     `;
     elements.countRecordList.appendChild(entry);
   }
-}
-
-async function handleCountRecordChange(event) {
-  const input = event.target.closest("[data-record-item-id]");
-  if (!input) return;
-  await updateCountRecordItemStatus(input.dataset.recordId, input.dataset.recordItemId, input.checked);
 }
 
 function handleCountRecordClick(event) {
@@ -2359,24 +2371,57 @@ function handleCountRecordClick(event) {
   const correctionButton = event.target.closest("button[data-action='save-count-correction']");
   if (correctionButton) return saveCountCorrection(correctionButton.dataset.entryId);
 
+  const saveStatusButton = event.target.closest("button[data-action='save-count-item-status']");
+  if (saveStatusButton) return saveCountRecordItemStatus(saveStatusButton);
+
+  const toggleStatusButton = event.target.closest("button[data-action='toggle-count-status']");
+  if (toggleStatusButton) {
+    toggleCountItemStatusEditor(toggleStatusButton.closest("[data-count-status-row]"));
+    return;
+  }
+
   const shareButton = event.target.closest("button[data-action='share-count-record']");
-  if (shareButton) shareCountRecordToNotes(shareButton.dataset.recordId);
+  if (shareButton) return shareCountRecordToNotes(shareButton.dataset.recordId);
+
+  const statusRow = event.target.closest("[data-count-status-row]");
+  if (statusRow && !event.target.closest("select, input, button, a")) toggleCountItemStatusEditor(statusRow);
 }
 
-async function updateCountRecordItemStatus(recordId, itemId, requested) {
+function toggleCountItemStatusEditor(row) {
+  const editor = row?.querySelector("[data-count-status-editor]");
+  if (!editor) return;
+  const shouldOpen = editor.hidden;
+  elements.countRecordList.querySelectorAll("[data-count-status-editor]").forEach((entry) => {
+    entry.hidden = true;
+    entry.closest("[data-count-status-row]")?.querySelector("[data-action='toggle-count-status']")?.setAttribute("aria-expanded", "false");
+  });
+  editor.hidden = !shouldOpen;
+  row.querySelector("[data-action='toggle-count-status']")?.setAttribute("aria-expanded", String(shouldOpen));
+}
+
+async function saveCountRecordItemStatus(button) {
+  const row = button.closest("[data-count-status-row]");
+  const select = row?.querySelector("[data-count-purchase-state]");
+  if (!row || !select) return;
+  button.disabled = true;
+  await updateCountRecordItemStatus(row.dataset.recordId, row.dataset.recordItemId, select.value);
+}
+
+async function updateCountRecordItemStatus(recordId, itemId, purchaseState) {
   try {
     const response = await fetch("/api/count-records/item-status", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recordId, itemId, requested }),
+      body: JSON.stringify({ recordId, itemId, purchaseState }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Falha ao atualizar produto.");
     countRecords = result.records || [];
     countHistoryEntries = flattenClientCountRecords(countRecords);
+    setSyncStatus(`Item guardado como ${countPurchaseStateLabel(result.purchaseState || purchaseState).toLowerCase()}.`, "success");
     renderCountHistory();
   } catch (error) {
-    setSyncStatus(error.message || "Nao foi possivel marcar como solicitado.", "error");
+    setSyncStatus(error.message || "Nao foi possivel guardar a situação do item.", "error");
     fetchCountRecords();
   }
 }
@@ -2420,6 +2465,19 @@ function clearCountHistoryFilters() {
   renderCountHistory();
 }
 
+function countPurchaseState(item) {
+  const state = normalizeText(item?.purchaseState);
+  if (["purchased", "comprado", "comprada"].includes(state)) return "purchased";
+  if (["requested", "solicitado", "solicitada"].includes(state)) return "requested";
+  return item?.requested ? "requested" : "pending";
+}
+
+function countPurchaseStateLabel(state) {
+  if (state === "purchased") return "Comprado";
+  if (state === "requested") return "Solicitado";
+  return "Pendente";
+}
+
 function flattenClientCountRecords(records) {
   return (records || []).flatMap((record) =>
     (record.items || []).map((item) => ({
@@ -2439,6 +2497,7 @@ function flattenClientCountRecords(records) {
       sector: record.employeeSector || record.sector || "",
       supplier: item.supplier || "",
       requested: item.requested === true,
+      purchaseState: item.purchaseState || (item.requested === true ? "requested" : "pending"),
       expiresAt: item.expiresAt || "",
     })),
   );

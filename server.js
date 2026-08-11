@@ -350,6 +350,10 @@ http
         return await handleCountRecordItemStatus(request, response);
       }
 
+      if (requestPath === "/api/count-records/delete" && request.method === "POST") {
+        return await handleDeleteCountRecord(request, response);
+      }
+
       if (requestPath === "/api/count-records/item-update" && request.method === "POST") {
         return await handleCountRecordItemUpdate(request, response);
       }
@@ -980,17 +984,35 @@ async function handleCountRecordItemStatus(request, response) {
   const body = await readJson(request);
   const recordId = String(body.recordId || "");
   const itemId = String(body.itemId || "");
-  const requested = body.requested === true;
+  const purchaseState = normalizeCountPurchaseState(body.purchaseState);
   const records = readCountRecords();
   const record = records.find((entry) => entry.id === recordId);
   if (!record) return sendJson(response, 404, { error: "Registo nao encontrado." });
   const item = (record.items || []).find((entry) => entry.id === itemId);
   if (!item) return sendJson(response, 404, { error: "Produto nao encontrado no registo." });
 
-  item.requested = requested;
-  item.requestedAt = requested ? new Date().toISOString() : "";
+  const now = new Date().toISOString();
+  item.purchaseState = purchaseState;
+  item.requested = purchaseState !== "pending";
+  item.requestedAt = purchaseState === "pending" ? "" : item.requestedAt || now;
+  item.purchasedAt = purchaseState === "purchased" ? now : "";
   writeCountRecords(records);
-  return sendJson(response, 200, { records: records.slice(0, 120) });
+  return sendJson(response, 200, { records: records.slice(0, 120), purchaseState });
+}
+
+async function handleDeleteCountRecord(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session || !["manager", "admin"].includes(normalizeRole(session.role))) {
+    return sendJson(response, 403, { error: "Apenas gestor ou administrador pode apagar uma contagem." });
+  }
+
+  const recordId = String(body.recordId || "");
+  const records = readCountRecords();
+  const remainingRecords = records.filter((record) => record.id !== recordId);
+  if (remainingRecords.length === records.length) return sendJson(response, 404, { error: "Registo nao encontrado." });
+  writeCountRecords(remainingRecords);
+  return sendJson(response, 200, { ok: true, records: remainingRecords.slice(0, 120) });
 }
 
 async function handleCountRecordItemUpdate(request, response) {
@@ -1408,6 +1430,8 @@ function buildCountRecord(rawRecord, session) {
       lowStock: item.lowStock === true,
       requested: false,
       requestedAt: "",
+      purchaseState: "pending",
+      purchasedAt: "",
     })),
   };
 }
@@ -1533,6 +1557,8 @@ function pageToCountRecord(page, properties, titlePropertyName) {
     observation: propertyText(getProperty("observation")),
     requested: false,
     requestedAt: "",
+    purchaseState: "pending",
+    purchasedAt: "",
   };
   return {
     id: parentRecordId || page.id,
@@ -1589,6 +1615,7 @@ function flattenCountRecords(records) {
         sector: record.employeeSector || "",
         supplier: item.supplier || "",
         requested: item.requested === true,
+        purchaseState: normalizeCountPurchaseState(item.purchaseState, item.requested === true),
         expiresAt: item.expiresAt || "",
       });
     }
@@ -1613,6 +1640,13 @@ function compareCountEntries(a, b) {
 
 function countEntryKey(entry) {
   return [entry.countDate, normalizeTextKey(entry.productName), entry.quantity, normalizeTextKey(entry.employeeName), normalizeTextKey(entry.supplier)].join("|");
+}
+
+function normalizeCountPurchaseState(value, requested = false) {
+  const normalized = normalizeTextKey(value);
+  if (["purchased", "comprado", "comprada"].includes(normalized)) return "purchased";
+  if (["requested", "solicitado", "solicitada"].includes(normalized)) return "requested";
+  return requested ? "requested" : "pending";
 }
 
 function normalizeRevenueRecord(rawRecord) {
@@ -3169,6 +3203,15 @@ function readCountRecords() {
         }
         if (!("requestedAt" in item)) {
           item.requestedAt = "";
+          changed = true;
+        }
+        const purchaseState = normalizeCountPurchaseState(item.purchaseState, item.requested === true);
+        if (item.purchaseState !== purchaseState) {
+          item.purchaseState = purchaseState;
+          changed = true;
+        }
+        if (!("purchasedAt" in item)) {
+          item.purchasedAt = "";
           changed = true;
         }
         if (!("expiresAt" in item)) {

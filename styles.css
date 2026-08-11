@@ -2344,7 +2344,7 @@ td span {
 
 .count-record-item {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr);
+  grid-template-columns: 88px minmax(0, 1fr);
   gap: 8px;
   align-items: start;
   border: 1px solid var(--line);
@@ -2355,13 +2355,76 @@ td span {
 }
 
 .count-record-item.requested {
-  border-color: #bdd9c8;
+  border-color: #e4c66d;
+  background: #fff9e8;
+}
+
+.count-record-item.purchased {
+  border-color: #9bc9aa;
   background: #eef8f2;
 }
 
-.count-record-item > input[type="checkbox"] {
-  width: 18px;
-  min-height: 18px;
+.count-status-marker {
+  align-items: center;
+  align-self: start;
+  background: #f0efec;
+  border: 1px solid #d8d5cf;
+  border-radius: 6px;
+  color: #55504b;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 34px;
+  padding: 6px 8px;
+  width: 88px;
+}
+
+button.count-status-marker {
+  cursor: pointer;
+}
+
+.count-status-marker.requested {
+  background: #fff0bd;
+  border-color: #d9b84f;
+  color: #745a05;
+}
+
+.count-status-marker.purchased {
+  background: #dff2e5;
+  border-color: #86bb98;
+  color: #21663a;
+}
+
+.count-item-status-editor {
+  align-items: end;
+  background: #f7f7f5;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: grid;
+  gap: 8px;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 10px;
+}
+
+.count-item-status-editor[hidden] {
+  display: none;
+}
+
+.count-item-status-editor label {
+  display: grid;
+  gap: 5px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.count-item-status-editor select {
+  min-height: 42px;
+}
+
+.count-item-status-editor .button {
+  min-height: 42px;
 }
 
 .count-record-item small {
