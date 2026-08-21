@@ -1801,6 +1801,8 @@ function validateTimeClockLocation(location) {
       error: `Ponto nao registado. Estás a ${Math.round(distanceMeters)} m da loja; o limite é ${Math.round(TIME_CLOCK_LOCATION.radiusMeters)} m.`,
       location: {
         status: "outside",
+        latitude,
+        longitude,
         distanceMeters: Math.round(distanceMeters),
         accuracyMeters: Math.round(accuracy),
         radiusMeters: Math.round(TIME_CLOCK_LOCATION.radiusMeters),

@@ -289,7 +289,13 @@ async function punchTime(action) {
       body: JSON.stringify({ authToken: auth.token, date: todayDateText(), action, location }),
     });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.error || "Falha ao registrar ponto.");
+    if (!response.ok) {
+      const capturedLocation = result.location;
+      const coordinates = Number.isFinite(Number(capturedLocation?.latitude)) && Number.isFinite(Number(capturedLocation?.longitude))
+        ? ` GPS atual: ${Number(capturedLocation.latitude).toFixed(7)}, ${Number(capturedLocation.longitude).toFixed(7)}.`
+        : "";
+      throw new Error(`${result.error || "Falha ao registrar ponto."}${coordinates}`);
+    }
     renderTimeClock(result.record);
     elements.timeClockStatus.textContent = [`${timeActionLabel(action)} registrada.`, timeLocationText(result.record?.lastLocation)]
       .filter(Boolean)
