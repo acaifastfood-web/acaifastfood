@@ -2468,6 +2468,9 @@ function serveStatic(request, response) {
   if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
     return sendText(response, 403, "Acesso negado");
   }
+  if (relativePath === path.basename(STORE_LOCATION_PATH)) {
+    return sendText(response, 404, "Ficheiro nao encontrado");
+  }
 
   fs.readFile(filePath, (error, data) => {
     if (error) return sendText(response, 404, "Ficheiro nao encontrado");
