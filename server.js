@@ -27,8 +27,8 @@ const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-5-mini";
 const OPENAI_VISION_FALLBACK_MODELS = ["gpt-5.5", "gpt-4.1-mini", "gpt-4o-mini"];
 const STORE_LOCATION_PATH = path.join(ROOT, "store-location.json");
 const DEFAULT_STORE_LOCATION = {
-  latitude: 37.0704384,
-  longitude: -8.0969728,
+  latitude: 37.0691534,
+  longitude: -8.093928,
   radiusMeters: 120,
   maxAccuracyMeters: 200,
 };
