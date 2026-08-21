@@ -353,17 +353,49 @@ function getTimeClockLocation() {
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
+    let bestPosition = null;
+    let watchId = null;
+    let finished = false;
+
+    const finish = (callback, value) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeoutId);
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      callback(value);
+    };
+    const positionValue = (position) => ({
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude,
+      accuracy: position.coords.accuracy,
+      capturedAt: new Date(position.timestamp || Date.now()).toISOString(),
+    });
+    const timeoutId = window.setTimeout(() => {
+      if (bestPosition) {
+        finish(resolve, positionValue(bestPosition));
+        return;
+      }
+      finish(reject, new Error(geolocationErrorMessage({ code: 3 })));
+    }, 45000);
+
+    watchId = navigator.geolocation.watchPosition(
       (position) => {
-        resolve({
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          capturedAt: new Date(position.timestamp || Date.now()).toISOString(),
-        });
+        if (!bestPosition || position.coords.accuracy < bestPosition.coords.accuracy) bestPosition = position;
+        const accuracy = Math.round(position.coords.accuracy);
+        if (accuracy <= 100) {
+          finish(resolve, positionValue(position));
+          return;
+        }
+        elements.timeClockStatus.textContent = `GPS encontrado (precisão ${accuracy} m). A melhorar precisão...`;
       },
-      (error) => reject(new Error(geolocationErrorMessage(error))),
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+      (error) => {
+        if (error?.code === 1 || !bestPosition) {
+          finish(reject, new Error(geolocationErrorMessage(error)));
+          return;
+        }
+        finish(resolve, positionValue(bestPosition));
+      },
+      { enableHighAccuracy: true, timeout: 40000, maximumAge: 300000 },
     );
   });
 }
@@ -371,7 +403,7 @@ function getTimeClockLocation() {
 function geolocationErrorMessage(error) {
   if (error?.code === 1) return "Permite o acesso à localização para registrar o ponto.";
   if (error?.code === 2) return "Não foi possível encontrar a localização. Confirma se o GPS está ativo.";
-  if (error?.code === 3) return "A localização demorou demasiado. Tenta novamente perto da loja.";
+  if (error?.code === 3) return "O navegador não conseguiu obter o GPS. No iPhone, abre o app no Safari e ativa Localização Precisa.";
   return "Não foi possível obter a localização do telemóvel.";
 }
 

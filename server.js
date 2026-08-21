@@ -29,8 +29,8 @@ const STORE_LOCATION_PATH = path.join(ROOT, "store-location.json");
 const DEFAULT_STORE_LOCATION = {
   latitude: 37.0704384,
   longitude: -8.0969728,
-  radiusMeters: 100,
-  maxAccuracyMeters: 120,
+  radiusMeters: 120,
+  maxAccuracyMeters: 200,
 };
 const TIME_CLOCK_LOCATION = getTimeClockLocationConfig();
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
