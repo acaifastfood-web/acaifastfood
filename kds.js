@@ -11,6 +11,7 @@ let orders = [];
 let loading = false;
 let refreshTimer;
 let activeDialogOrderId = "";
+let pendingCancelOrderId = "";
 let activeCenter = localStorage.getItem(KDS_CENTER_KEY) || "all";
 let deletedOrders = [];
 
@@ -28,6 +29,9 @@ const elements = {
   restoreOrdersButton: document.querySelector("#restoreOrdersButton"), restoreOrdersDialog: document.querySelector("#restoreOrdersDialog"),
   restoreOrdersList: document.querySelector("#restoreOrdersList"), restoreOrdersMessage: document.querySelector("#restoreOrdersMessage"),
   closeRestoreDialogButton: document.querySelector("#closeRestoreDialogButton"), closeRestoreDialogFooterButton: document.querySelector("#closeRestoreDialogFooterButton"),
+  cancelOrderDialog: document.querySelector("#cancelOrderDialog"), cancelOrderTitle: document.querySelector("#cancelOrderTitle"), cancelOrderReason: document.querySelector("#cancelOrderReason"),
+  cancelOrderMessage: document.querySelector("#cancelOrderMessage"), closeCancelDialogButton: document.querySelector("#closeCancelDialogButton"),
+  backCancelDialogButton: document.querySelector("#backCancelDialogButton"), confirmCancelOrderButton: document.querySelector("#confirmCancelOrderButton"),
 };
 
 elements.loginForm.addEventListener("submit", login);
@@ -42,6 +46,9 @@ elements.restoreOrdersButton.addEventListener("click", openRestoreOrders);
 elements.closeRestoreDialogButton.addEventListener("click", () => elements.restoreOrdersDialog.close());
 elements.closeRestoreDialogFooterButton.addEventListener("click", () => elements.restoreOrdersDialog.close());
 elements.restoreOrdersList.addEventListener("click", handleRestoreAction);
+elements.closeCancelDialogButton.addEventListener("click", closeCancelDialog);
+elements.backCancelDialogButton.addEventListener("click", closeCancelDialog);
+elements.confirmCancelOrderButton.addEventListener("click", confirmCancelOrder);
 elements.orderControlDialog.addEventListener("close", () => { activeDialogOrderId = ""; });
 document.querySelectorAll("[data-center-filter]").forEach((button) => button.addEventListener("click", () => setCenterFilter(button.dataset.centerFilter)));
 
@@ -143,6 +150,7 @@ function ticketHtml(order) {
   const centers = productionCenters(order);
   const cardName = order.customerName || order.table || channelLabels[order.channel] || "Local";
   const centerCode = centers.map((center) => ({ "Açaí": "A", "Cozinha": "C", "Balcão": "B" }[center] || center.slice(0, 1))).join("+");
+  const deliveryDetails = deliveryOrderDetails(order);
   const items = visibleOrderItems(order).map((item) => {
     const itemStatus = item.itemStatus || "pending";
     const statusLabel = itemStatus === "ready" ? "Pronto" : itemStatus === "cancelled" ? "Cancelado" : "";
@@ -160,6 +168,7 @@ function ticketHtml(order) {
       <button class="ticket-command command-cancel" data-action="cancel" data-id="${order.id}" type="button" title="Apagar pedido" aria-label="Apagar pedido"><span aria-hidden="true">×</span></button>
     </div>
     <ul class="ticket-items">${items}</ul>
+    ${deliveryDetails ? `<p class="ticket-delivery"><strong>ENTREGA</strong><span>${escapeHtml(deliveryDetails.address)}</span><span>Tel.: ${escapeHtml(deliveryDetails.phone)}</span><span>${escapeHtml(deliveryDetails.payment)}</span><span>${escapeHtml(deliveryDetails.change)}</span></p>` : ""}
     ${order.notes ? `<p class="ticket-note">${escapeHtml(order.notes)}</p>` : ""}
   </article>`;
 }
@@ -180,10 +189,7 @@ async function handleBoardAction(event) {
   button.disabled = true;
   try {
     if (button.dataset.action === "cancel") {
-      const reason = prompt(`Motivo para apagar o pedido #${order.number}:`, "Cancelado pelo cliente");
-      if (reason === null) return;
-      const result = await api("/api/orders/cancel", { authToken: auth.token, orderId: order.id, reason });
-      deletedOrders.unshift(result.order); orders = orders.filter((entry) => entry.id !== order.id); renderBoard(); showToast(`Pedido #${order.number} apagado. Pode restaurá-lo no menu superior.`);
+      openCancelDialog(order.id);
     }
   } catch (error) {
     showToast(error.message);
@@ -209,7 +215,8 @@ function renderOrderDialog() {
     const details = [item.variant, ...(item.modifiers || []).map(displayModifier), itemProductionCenters(item).join(" + ")].filter(Boolean);
     return `<article class="dialog-item item-pending"><span class="dialog-item-qty">${item.quantity}×</span><span class="dialog-item-name"><strong>${escapeHtml(item.name)}</strong><small>${details.map(escapeHtml).join(" · ")}</small>${item.notes ? `<small class="dialog-item-observation"><strong>OBS.: ${escapeHtml(item.notes)}</strong></small>` : ""}</span><div class="dialog-item-actions"><button class="item-finish-button" data-item-action="ready" data-item-id="${item.id}" type="button">✓ Finalizar</button><button class="item-cancel-button" data-item-action="cancelled" data-item-id="${item.id}" type="button">× Cancelar</button></div></article>`;
   }).join("");
-  elements.dialogMessage.textContent = order.notes ? `Observações: ${order.notes}` : "";
+  const deliveryDetails = deliveryOrderDetails(order);
+  elements.dialogMessage.textContent = [deliveryDetails ? `ENTREGA: ${deliveryDetails.address} · Tel.: ${deliveryDetails.phone} · ${deliveryDetails.payment} · ${deliveryDetails.change}` : "", order.notes ? `Observações: ${order.notes}` : ""].filter(Boolean).join("\n");
 }
 
 function handleDialogItemAction(event) {
@@ -253,14 +260,43 @@ async function updateSingleItem(itemId, action) {
 async function cancelDialogOrder() {
   const order = orders.find((entry) => entry.id === activeDialogOrderId);
   if (!order) return;
-  const reason = prompt(`Motivo do cancelamento do pedido #${order.number}:`, "Cancelado pelo cliente");
-  if (reason === null) return;
-  setDialogBusy(true);
+  openCancelDialog(order.id);
+}
+
+function openCancelDialog(orderId) {
+  const order = orders.find((entry) => entry.id === orderId);
+  if (!order) return showToast("Pedido não encontrado.");
+  pendingCancelOrderId = order.id;
+  elements.cancelOrderTitle.textContent = `Apagar pedido #${order.number}`;
+  elements.cancelOrderReason.value = "";
+  elements.cancelOrderMessage.textContent = "";
+  if (!elements.cancelOrderDialog.open) elements.cancelOrderDialog.showModal();
+  setTimeout(() => { elements.cancelOrderReason.focus(); elements.cancelOrderReason.select(); }, 50);
+}
+
+function closeCancelDialog() {
+  pendingCancelOrderId = "";
+  if (elements.cancelOrderDialog.open) elements.cancelOrderDialog.close();
+}
+
+async function confirmCancelOrder() {
+  const order = orders.find((entry) => entry.id === pendingCancelOrderId);
+  if (!order) return closeCancelDialog();
+  const reason = elements.cancelOrderReason.value.trim();
+  elements.confirmCancelOrderButton.disabled = true;
+  elements.cancelOrderMessage.textContent = "A apagar pedido…";
   try {
     const result = await api("/api/orders/cancel", { authToken: auth.token, orderId: order.id, reason });
-    deletedOrders.unshift(result.order); orders = orders.filter((entry) => entry.id !== order.id); closeOrderDialog(); renderBoard(); showToast(`Pedido #${order.number} apagado. Pode restaurá-lo no menu superior.`);
-  } catch (error) { elements.dialogMessage.textContent = error.message; }
-  finally { setDialogBusy(false); }
+    deletedOrders.unshift(result.order);
+    orders = orders.filter((entry) => entry.id !== order.id);
+    closeCancelDialog();
+    if (activeDialogOrderId === order.id) closeOrderDialog();
+    renderBoard();
+    showToast(`Pedido #${order.number} apagado. Pode restaurá-lo no menu superior.`);
+  } catch (error) {
+    elements.cancelOrderMessage.textContent = error.message;
+    if (error.status === 401) { auth = null; saveAuth(); showLogin(error.message); }
+  } finally { elements.confirmCancelOrderButton.disabled = false; }
 }
 
 function setDialogBusy(busy) {
@@ -308,6 +344,15 @@ async function handleRestoreAction(event) {
 function formatDateTime(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat("pt-PT", { dateStyle: "short", timeStyle: "short" }).format(date);
+}
+
+function deliveryOrderDetails(order) {
+  if (order?.channel !== "delivery") return null;
+  const payment = { cash: "DINHEIRO", multibanco: "MULTIBANCO", mbway: "MB WAY", account: "CONTA" }[order.paymentMethod] || "Pagamento não indicado";
+  const change = order.paymentMethod === "cash"
+    ? (order.changeRequired ? `Troco para ${money(order.cashReceived)} · entregar ${money(order.changeDue)} de troco` : "Sem troco")
+    : "Sem troco";
+  return { address: order.deliveryAddress || "Morada não indicada", phone: order.deliveryPhone || "Telefone não indicado", payment, change };
 }
 
 async function api(url, body) {

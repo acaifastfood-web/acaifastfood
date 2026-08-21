@@ -467,6 +467,12 @@ async function handleCreateOrder(request, response) {
   if (!items.length) return sendJson(response, 400, { error: "Adiciona pelo menos um produto ao pedido." });
 
   const tableNumber = tableNumberFromLabel(body.table);
+  const channel = normalizeOrderChannel(body.channel);
+  const isDelivery = channel === "delivery";
+  const deliveryAddress = String(body.deliveryAddress || "").trim().slice(0, 200);
+  const deliveryPhone = String(body.deliveryPhone || "").trim().slice(0, 30);
+  if (isDelivery && !deliveryAddress) return sendJson(response, 400, { error: "Indica a morada da entrega." });
+  if (isDelivery && !deliveryPhone) return sendJson(response, 400, { error: "Indica o telefone da entrega." });
   const paymentMethod = tableNumber ? "" : normalizePaymentMethod(body.paymentMethod);
   const orderTotal = roundMoney(items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0));
   const cashReceived = paymentMethod === "cash" ? moneyValue(body.cashReceived) : 0;
@@ -480,14 +486,17 @@ async function handleCreateOrder(request, response) {
     id: crypto.randomUUID(),
     number: nextOrderNumber(orders, businessDate),
     businessDate,
-    channel: normalizeOrderChannel(body.channel),
+    channel,
     customerName: String(body.customerName || "").trim().slice(0, 80),
     table: String(body.table || "").trim().slice(0, 30),
     notes: String(body.notes || "").trim().slice(0, 500),
-    paymentStatus: tableNumber ? "pending" : "paid",
+    paymentStatus: tableNumber || isDelivery ? "pending" : "paid",
     paymentMethod,
     cashReceived,
     changeDue: paymentMethod === "cash" ? roundMoney(cashReceived - orderTotal) : 0,
+    deliveryAddress,
+    deliveryPhone,
+    changeRequired: isDelivery && paymentMethod === "cash" && body.changeRequired === true,
     items,
     status: "new",
     createdBy: session.name,
@@ -3361,6 +3370,9 @@ function normalizeOrderRecord(record) {
     paymentMethod: normalizePaymentMethod(record.paymentMethod),
     cashReceived: moneyValue(record.cashReceived),
     changeDue: moneyValue(record.changeDue),
+    deliveryAddress: String(record.deliveryAddress || "").trim().slice(0, 200),
+    deliveryPhone: String(record.deliveryPhone || "").trim().slice(0, 30),
+    changeRequired: record.changeRequired === true,
     settlement: normalizeOrderSettlement(record.settlement),
     payments: normalizeOrderPayments(record.payments),
     status: normalizeOrderStatus(record.status) || "new",

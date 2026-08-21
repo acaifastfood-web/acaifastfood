@@ -32,6 +32,9 @@ const elements = {
   cartItems: document.querySelector("#cartItems"), cartCount: document.querySelector("#cartCount"), cartTotal: document.querySelector("#cartTotal"),
   orderChannel: document.querySelector("#orderChannel"), orderTable: document.querySelector("#orderTable"), customerName: document.querySelector("#customerName"),
   paymentMethod: document.querySelector("#paymentMethod"), paymentMethodField: document.querySelector("#paymentMethodField"), orderNotes: document.querySelector("#orderNotes"), sendOrderButton: document.querySelector("#sendOrderButton"),
+  deliveryAddressField: document.querySelector("#deliveryAddressField"), deliveryAddress: document.querySelector("#deliveryAddress"), deliveryPhoneField: document.querySelector("#deliveryPhoneField"), deliveryPhone: document.querySelector("#deliveryPhone"),
+  deliveryNeedsChangeField: document.querySelector("#deliveryNeedsChangeField"), deliveryNeedsChange: document.querySelector("#deliveryNeedsChange"), deliveryCashAmountField: document.querySelector("#deliveryCashAmountField"), deliveryCashAmount: document.querySelector("#deliveryCashAmount"),
+  deliveryChangePreview: document.querySelector("#deliveryChangePreview"), deliveryChangeAmount: document.querySelector("#deliveryChangeAmount"),
   orderStatus: document.querySelector("#orderStatus"), toast: document.querySelector("#toast"),
   serviceTabs: document.querySelector(".service-tabs"), tablesPanel: document.querySelector("#tablesPanel"), tableGrid: document.querySelector("#tableGrid"), tablesSummary: document.querySelector("#tablesSummary"),
   orderChannelField: document.querySelector("#orderChannelField"), orderTableField: document.querySelector("#orderTableField"), serviceRequiredMessage: document.querySelector("#serviceRequiredMessage"),
@@ -92,6 +95,10 @@ elements.toggleAllPaymentItems.addEventListener("click", toggleAllPaymentItems);
 elements.tableAccountOrders.addEventListener("change", handlePaymentItemSelection);
 elements.mixedPaymentToggle.addEventListener("change", updateTablePayment);
 elements.mixedPaymentFields.addEventListener("input", updateTablePayment);
+elements.orderChannel.addEventListener("change", updateDeliveryFields);
+elements.paymentMethod.addEventListener("change", updateDeliveryFields);
+elements.deliveryNeedsChange.addEventListener("change", updateDeliveryFields);
+elements.deliveryCashAmount.addEventListener("input", updateDeliveryFields);
 elements.acaiCustomizationForm.addEventListener("change", updateCustomizationLimits);
 elements.acaiCustomizationForm.addEventListener("click", handleCustomizationQuantityClick);
 elements.acaiCustomizationForm.addEventListener("submit", confirmAcaiCustomization);
@@ -196,7 +203,7 @@ function setServiceMode(mode) {
     elements.orderTable.value = "";
     elements.orderChannelField.hidden = true;
   }
-  renderTables(); updateServiceGate(); renderCart();
+  renderTables(); updateServiceGate(); updateDeliveryFields(); renderCart();
 }
 
 function selectTable(tableNumber) {
@@ -208,6 +215,20 @@ function selectTable(tableNumber) {
 
 function serviceIsReady() {
   return serviceMode === "counter" || (serviceMode === "tables" && selectedTable > 0);
+}
+
+function updateDeliveryFields() {
+  const isDelivery = serviceMode === "counter" && elements.orderChannel.value === "delivery";
+  const isCashDelivery = isDelivery && elements.paymentMethod.value === "cash";
+  const needsChange = isCashDelivery && elements.deliveryNeedsChange.value === "yes";
+  elements.deliveryAddressField.hidden = !isDelivery;
+  elements.deliveryPhoneField.hidden = !isDelivery;
+  elements.deliveryNeedsChangeField.hidden = !isCashDelivery;
+  elements.deliveryCashAmountField.hidden = !needsChange;
+  elements.deliveryChangePreview.hidden = !needsChange;
+  const total = cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+  const cashAmount = Number(elements.deliveryCashAmount.value || 0);
+  elements.deliveryChangeAmount.textContent = money(Math.max(0, cashAmount - total));
 }
 
 function updateServiceGate() {
@@ -707,6 +728,7 @@ function renderCart() {
   const total = cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
   elements.cartCount.textContent = String(count); elements.cartTotal.textContent = money(total);
   elements.sendOrderButton.disabled = !cart.length || sending || !serviceIsReady();
+  updateDeliveryFields();
   elements.cartItems.innerHTML = cart.length ? cart.map((item) => `
     <article class="cart-row">
       <div><strong>${escapeHtml(item.name)}</strong><small>${escapeHtml(item.variant)}</small>${item.modifiers?.length ? `<small>${item.modifiers.map(escapeHtml).join(" · ")}</small>` : ""}${item.notes ? `<small>Obs.: ${escapeHtml(item.notes)}</small>` : ""}
@@ -726,8 +748,17 @@ async function sendOrder() {
   try {
     const total = cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
     const paymentMethod = serviceMode === "tables" ? "" : elements.paymentMethod.value;
+    const isDelivery = serviceMode === "counter" && elements.orderChannel.value === "delivery";
+    const deliveryAddress = elements.deliveryAddress.value.trim();
+    const deliveryPhone = elements.deliveryPhone.value.trim();
+    const changeRequired = isDelivery && paymentMethod === "cash" && elements.deliveryNeedsChange.value === "yes";
+    if (isDelivery && !deliveryAddress) { setStatus(elements.orderStatus, "Indica a morada da entrega.", "error"); elements.deliveryAddress.focus(); return; }
+    if (isDelivery && !deliveryPhone) { setStatus(elements.orderStatus, "Indica o telefone da entrega.", "error"); elements.deliveryPhone.focus(); return; }
     let cashReceived = 0;
-    if (paymentMethod === "cash") {
+    if (isDelivery && paymentMethod === "cash") {
+      cashReceived = changeRequired ? Number(elements.deliveryCashAmount.value || 0) : total;
+      if (!Number.isFinite(cashReceived) || cashReceived < total) { setStatus(elements.orderStatus, "O valor indicado para troco é inferior ao total do pedido.", "error"); elements.deliveryCashAmount.focus(); return; }
+    } else if (paymentMethod === "cash") {
       const receivedText = prompt(`Total ${money(total)}. Valor recebido em dinheiro:`, total.toFixed(2).replace(".", ","));
       if (receivedText === null) { setStatus(elements.orderStatus, "Pagamento cancelado."); return; }
       cashReceived = Number(receivedText.replace(",", "."));
@@ -735,10 +766,11 @@ async function sendOrder() {
     }
     const result = await api("/api/orders/create", {
       authToken: auth.token, items: cart, channel: elements.orderChannel.value, table: elements.orderTable.value,
-      customerName: elements.customerName.value, paymentMethod, cashReceived, notes: elements.orderNotes.value,
+      customerName: elements.customerName.value, paymentMethod, cashReceived, deliveryAddress, deliveryPhone, changeRequired, notes: elements.orderNotes.value,
     });
     const number = result.order.number;
     cart = []; elements.customerName.value = ""; elements.orderNotes.value = ""; elements.paymentMethod.value = "cash";
+    elements.deliveryAddress.value = ""; elements.deliveryPhone.value = ""; elements.deliveryNeedsChange.value = "no"; elements.deliveryCashAmount.value = "";
     elements.orderTable.value = "";
     setServiceMode(""); renderCart(); setStatus(elements.orderStatus, `Pedido #${number} enviado. Selecione o próximo atendimento.`, "success");
     showToast(result.order.paymentMethod === "cash" ? `Pedido #${number} · Troco ${money(result.order.changeDue)}` : `Pedido #${number} entrou na cozinha`);

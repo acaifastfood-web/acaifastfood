@@ -60,6 +60,24 @@
       <footer><span id="restoreOrdersMessage"></span><button id="closeRestoreDialogFooterButton" type="button">Voltar</button></footer>
     </dialog>
 
+    <dialog class="cancel-order-dialog" id="cancelOrderDialog">
+      <header>
+        <div><span>Confirmação necessária</span><strong id="cancelOrderTitle">Apagar pedido #0</strong></div>
+        <button id="closeCancelDialogButton" type="button" aria-label="Fechar">×</button>
+      </header>
+      <div class="cancel-order-body">
+        <p>O pedido será retirado do KDS, mas poderá ser recuperado posteriormente em <strong>Restaurar</strong>.</p>
+        <label>Motivo <span>(opcional)</span>
+          <textarea id="cancelOrderReason" maxlength="240" rows="3" placeholder="Pode deixar em branco"></textarea>
+        </label>
+        <p class="dialog-message" id="cancelOrderMessage"></p>
+      </div>
+      <footer>
+        <button id="backCancelDialogButton" type="button">Voltar</button>
+        <button class="confirm-delete-order" id="confirmCancelOrderButton" type="button">Apagar pedido</button>
+      </footer>
+    </dialog>
+
     <section class="auth-screen" id="authScreen">
       <form class="auth-card auth-form" id="loginForm">
         <img src="logo-acai.png" alt="Açaí Fast Food" /><h2>Entrar no KDS</h2><p>Identifica o operador da cozinha.</p>

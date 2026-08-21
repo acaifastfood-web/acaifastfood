@@ -53,6 +53,11 @@
           <label class="field" id="orderTableField">Mesa / referência<input id="orderTable" maxlength="30" placeholder="Ex.: Mesa 4" /></label>
           <label class="field">Cliente<input id="customerName" maxlength="80" placeholder="Nome (opcional)" /></label>
           <label class="field" id="paymentMethodField">Pagamento<select id="paymentMethod"><option value="cash">DINHEIRO</option><option value="multibanco">MULTIBANCO</option><option value="mbway">MB WAY</option><option value="account">CONTA</option></select></label>
+          <label class="field full delivery-field" id="deliveryAddressField" hidden>Morada *<input id="deliveryAddress" maxlength="200" autocomplete="street-address" placeholder="Rua, número, andar e localidade" /></label>
+          <label class="field delivery-field" id="deliveryPhoneField" hidden>Telefone *<input id="deliveryPhone" type="tel" maxlength="30" autocomplete="tel" placeholder="Ex.: 912 345 678" /></label>
+          <label class="field delivery-field" id="deliveryNeedsChangeField" hidden>Precisa de troco?<select id="deliveryNeedsChange"><option value="no">Não</option><option value="yes">Sim</option></select></label>
+          <label class="field delivery-field" id="deliveryCashAmountField" hidden>Troco para quanto?<div class="cash-payment-input"><input id="deliveryCashAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00" /><span>€</span></div></label>
+          <div class="delivery-change-preview" id="deliveryChangePreview" hidden><span>Troco previsto</span><strong id="deliveryChangeAmount">0,00 €</strong></div>
           <label class="field full">Observações<textarea id="orderNotes" maxlength="500" placeholder="Sem banana, alergias, entrega…"></textarea></label>
         </div>
         <div class="cart-footer">
