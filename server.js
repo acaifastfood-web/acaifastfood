@@ -25,10 +25,11 @@ const NOTION_MANAGEMENT_ACTIVITIES_URL = process.env.NOTION_MANAGEMENT_ACTIVITIE
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
 const OPENAI_VISION_MODEL = process.env.OPENAI_VISION_MODEL || "gpt-5-mini";
 const OPENAI_VISION_FALLBACK_MODELS = ["gpt-5.5", "gpt-4.1-mini", "gpt-4o-mini"];
+const STORE_LOCATION_PATH = path.join(ROOT, "store-location.json");
 const DEFAULT_STORE_LOCATION = {
-  latitude: 37.0737152,
-  longitude: -8.1002496,
-  radiusMeters: 80,
+  latitude: 37.0704384,
+  longitude: -8.0969728,
+  radiusMeters: 100,
   maxAccuracyMeters: 120,
 };
 const TIME_CLOCK_LOCATION = getTimeClockLocationConfig();
@@ -1759,20 +1760,37 @@ function todayDateText() {
 }
 
 function getTimeClockLocationConfig() {
-  const configuredLatitude = optionalNumber(process.env.STORE_LATITUDE || process.env.TIME_CLOCK_STORE_LATITUDE);
-  const configuredLongitude = optionalNumber(process.env.STORE_LONGITUDE || process.env.TIME_CLOCK_STORE_LONGITUDE);
+  const savedLocation = readStoreLocationOverride();
+  const configuredLatitude = optionalNumber(
+    savedLocation.latitude ?? process.env.STORE_LATITUDE ?? process.env.TIME_CLOCK_STORE_LATITUDE,
+  );
+  const configuredLongitude = optionalNumber(
+    savedLocation.longitude ?? process.env.STORE_LONGITUDE ?? process.env.TIME_CLOCK_STORE_LONGITUDE,
+  );
   const latitude = Number.isFinite(configuredLatitude) ? configuredLatitude : DEFAULT_STORE_LOCATION.latitude;
   const longitude = Number.isFinite(configuredLongitude) ? configuredLongitude : DEFAULT_STORE_LOCATION.longitude;
   return {
     configured: Number.isFinite(latitude) && Number.isFinite(longitude),
     latitude,
     longitude,
-    radiusMeters: positiveNumber(process.env.STORE_RADIUS_METERS || process.env.TIME_CLOCK_RADIUS_METERS, DEFAULT_STORE_LOCATION.radiusMeters),
+    radiusMeters: positiveNumber(
+      savedLocation.radiusMeters ?? process.env.STORE_RADIUS_METERS ?? process.env.TIME_CLOCK_RADIUS_METERS,
+      DEFAULT_STORE_LOCATION.radiusMeters,
+    ),
     maxAccuracyMeters: positiveNumber(
-      process.env.STORE_MAX_ACCURACY_METERS || process.env.TIME_CLOCK_MAX_ACCURACY_METERS,
+      savedLocation.maxAccuracyMeters ?? process.env.STORE_MAX_ACCURACY_METERS ?? process.env.TIME_CLOCK_MAX_ACCURACY_METERS,
       DEFAULT_STORE_LOCATION.maxAccuracyMeters,
     ),
   };
+}
+
+function readStoreLocationOverride() {
+  try {
+    const location = JSON.parse(fs.readFileSync(STORE_LOCATION_PATH, "utf8"));
+    return location && typeof location === "object" ? location : {};
+  } catch {
+    return {};
+  }
 }
 
 function validateTimeClockLocation(location) {
