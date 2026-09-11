@@ -6,7 +6,7 @@
     <title>Caixa e Pedidos | Açaí Fast Food</title>
     <meta name="theme-color" content="#5a174f" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="orders.css?v=20260912-central-pedidos" />
+    <link rel="stylesheet" href="orders.css?v=20260912-pagamento-caixa" />
   </head>
   <body>
     <header class="order-header">
@@ -58,7 +58,7 @@
           <label class="field full delivery-field" id="deliveryAddressField" hidden>Morada *<input id="deliveryAddress" maxlength="200" autocomplete="street-address" placeholder="Rua, número, andar e localidade" /></label>
           <label class="field delivery-field" id="deliveryPhoneField" hidden>Telefone *<input id="deliveryPhone" type="tel" maxlength="30" autocomplete="tel" placeholder="Ex.: 912 345 678" /></label>
           <label class="field delivery-field" id="deliveryNeedsChangeField" hidden>Precisa de troco?<select id="deliveryNeedsChange"><option value="no">Não</option><option value="yes">Sim</option></select></label>
-          <label class="field delivery-field" id="deliveryCashAmountField" hidden>Troco para quanto?<div class="cash-payment-input"><input id="deliveryCashAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00" /><span>€</span></div></label>
+          <label class="field delivery-field" id="deliveryCashAmountField" hidden><span id="cashAmountLabel">Troco para quanto?</span><div class="cash-payment-input"><input id="deliveryCashAmount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00" /><span>€</span></div></label>
           <div class="delivery-change-preview" id="deliveryChangePreview" hidden><span>Troco previsto</span><strong id="deliveryChangeAmount">0,00 €</strong></div>
           <label class="field full">Observações<textarea id="orderNotes" maxlength="500" placeholder="Sem banana, alergias, entrega…"></textarea></label>
         </div>
@@ -203,6 +203,6 @@
     </section>
     <div class="toast" id="toast" hidden></div>
     <script src="menu-data.js?v=20260804-repetir-complementos"></script>
-    <script src="pedidos.js?v=20260912-central-pedidos"></script>
+    <script src="pedidos.js?v=20260912-pagamento-caixa"></script>
   </body>
 </html>

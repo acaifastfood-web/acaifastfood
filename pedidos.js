@@ -36,7 +36,7 @@ const elements = {
   paymentMethod: document.querySelector("#paymentMethod"), paymentMethodField: document.querySelector("#paymentMethodField"), orderNotes: document.querySelector("#orderNotes"), sendOrderButton: document.querySelector("#sendOrderButton"),
   deliveryAddressField: document.querySelector("#deliveryAddressField"), deliveryAddress: document.querySelector("#deliveryAddress"), deliveryPhoneField: document.querySelector("#deliveryPhoneField"), deliveryPhone: document.querySelector("#deliveryPhone"),
   deliveryNeedsChangeField: document.querySelector("#deliveryNeedsChangeField"), deliveryNeedsChange: document.querySelector("#deliveryNeedsChange"), deliveryCashAmountField: document.querySelector("#deliveryCashAmountField"), deliveryCashAmount: document.querySelector("#deliveryCashAmount"),
-  deliveryChangePreview: document.querySelector("#deliveryChangePreview"), deliveryChangeAmount: document.querySelector("#deliveryChangeAmount"),
+  deliveryChangePreview: document.querySelector("#deliveryChangePreview"), deliveryChangeAmount: document.querySelector("#deliveryChangeAmount"), cashAmountLabel: document.querySelector("#cashAmountLabel"),
   orderStatus: document.querySelector("#orderStatus"), toast: document.querySelector("#toast"),
   serviceTabs: document.querySelector(".service-tabs"), tablesPanel: document.querySelector("#tablesPanel"), tableGrid: document.querySelector("#tableGrid"), tablesSummary: document.querySelector("#tablesSummary"),
   orderChannelField: document.querySelector("#orderChannelField"), orderTableField: document.querySelector("#orderTableField"), serviceRequiredMessage: document.querySelector("#serviceRequiredMessage"),
@@ -264,13 +264,16 @@ function serviceIsReady() {
 
 function updateDeliveryFields() {
   const isDelivery = serviceMode === "counter" && elements.orderChannel.value === "delivery";
-  const isCashDelivery = isDelivery && elements.paymentMethod.value === "cash";
+  const isCounterCash = serviceMode === "counter" && elements.paymentMethod.value === "cash";
+  const isCashDelivery = isDelivery && isCounterCash;
   const needsChange = isCashDelivery && elements.deliveryNeedsChange.value === "yes";
+  const needsCashAmount = isCounterCash && (!isDelivery || needsChange);
   elements.deliveryAddressField.hidden = !isDelivery;
   elements.deliveryPhoneField.hidden = !isDelivery;
   elements.deliveryNeedsChangeField.hidden = !isCashDelivery;
-  elements.deliveryCashAmountField.hidden = !needsChange;
-  elements.deliveryChangePreview.hidden = !needsChange;
+  elements.deliveryCashAmountField.hidden = !needsCashAmount;
+  elements.deliveryChangePreview.hidden = !needsCashAmount;
+  elements.cashAmountLabel.textContent = isDelivery ? "Troco para quanto?" : "Valor recebido";
   const total = cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
   const cashAmount = Number(elements.deliveryCashAmount.value || 0);
   elements.deliveryChangeAmount.textContent = money(Math.max(0, cashAmount - total));
@@ -927,10 +930,8 @@ async function sendOrder() {
       cashReceived = changeRequired ? Number(elements.deliveryCashAmount.value || 0) : total;
       if (!Number.isFinite(cashReceived) || cashReceived < total) { setStatus(elements.orderStatus, "O valor indicado para troco é inferior ao total do pedido.", "error"); elements.deliveryCashAmount.focus(); return; }
     } else if (paymentMethod === "cash") {
-      const receivedText = prompt(`Total ${money(total)}. Valor recebido em dinheiro:`, total.toFixed(2).replace(".", ","));
-      if (receivedText === null) { setStatus(elements.orderStatus, "Pagamento cancelado."); return; }
-      cashReceived = Number(receivedText.replace(",", "."));
-      if (!Number.isFinite(cashReceived) || cashReceived < total) { setStatus(elements.orderStatus, "O valor recebido é inferior ao total do pedido.", "error"); return; }
+      cashReceived = Number(elements.deliveryCashAmount.value || 0);
+      if (!Number.isFinite(cashReceived) || cashReceived < total) { setStatus(elements.orderStatus, "Indica um valor recebido igual ou superior ao total do pedido.", "error"); elements.deliveryCashAmount.focus(); return; }
     }
     if (serviceMode !== "tables") {
       receiptWindow = window.open("", "_blank", "width=420,height=760");
