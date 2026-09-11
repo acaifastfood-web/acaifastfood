@@ -30,9 +30,10 @@
       <nav class="section-tabs" aria-label="Secções do menu">
         <button class="active" data-view="products" type="button">Produtos <span id="productCount">0</span></button>
         <button data-view="categories" type="button">Categorias <span id="categoryCount">0</span></button>
+        <button data-view="settings" type="button">Configurações</button>
       </nav>
 
-      <section class="summary-grid" aria-label="Resumo do menu">
+      <section class="summary-grid" id="summaryGrid" aria-label="Resumo do menu">
         <article><span>Total de produtos</span><strong id="totalProducts">0</strong></article>
         <article><span>À venda</span><strong id="activeProducts">0</strong></article>
         <article><span>Ocultos no Caixa</span><strong id="inactiveProducts">0</strong></article>
@@ -61,6 +62,81 @@
       <section class="catalog-card categories-view" id="categoriesView" hidden>
         <div class="category-heading"><div><h2>Categorias do menu</h2><p>Resumo automático dos produtos cadastrados.</p></div><button class="primary-button" id="newCategoryProductButton" type="button">＋ Produto numa categoria</button></div>
         <div class="category-list" id="categoryList"></div>
+      </section>
+
+      <section class="settings-view" id="settingsView" hidden>
+        <form id="storeSettingsForm">
+          <article class="settings-card">
+            <header><div><p class="eyebrow">Identificação</p><h2>Loja e contacto</h2></div><span class="config-badge">Portugal · EUR</span></header>
+            <div class="settings-grid">
+              <label><span>Nome da loja</span><input id="storeName" required maxlength="100" /></label>
+              <label><span>NIF</span><input id="storeTaxNumber" maxlength="30" /></label>
+              <label><span>Telefone</span><input id="storePhone" type="tel" maxlength="40" /></label>
+              <label><span>Email</span><input id="storeEmail" type="email" maxlength="120" /></label>
+              <label class="span-2"><span>Rua</span><input id="storeStreet" maxlength="160" /></label>
+              <label><span>Número</span><input id="storeNumber" maxlength="20" /></label>
+              <label><span>Código postal</span><input id="storePostalCode" maxlength="20" /></label>
+              <label class="span-2"><span>Complemento</span><input id="storeComplement" maxlength="160" /></label>
+              <label><span>Localidade</span><input id="storeLocality" maxlength="80" /></label>
+              <label><span>Município</span><input id="storeMunicipality" maxlength="80" /></label>
+            </div>
+          </article>
+
+          <article class="settings-card">
+            <header><div><p class="eyebrow">Operação</p><h2>Atendimento e entrega</h2></div><span class="config-badge">Europe/Lisbon</span></header>
+            <div class="toggle-grid">
+              <label><input id="servesTables" type="checkbox" /><span><strong>Atendimento em mesas</strong><small>Disponibiliza as 50 mesas no Caixa.</small></span></label>
+              <label><input id="pickupEnabled" type="checkbox" /><span><strong>Retirada no local</strong><small>Permite pedidos para levantamento.</small></span></label>
+              <label><input id="deliveryEnabled" type="checkbox" /><span><strong>Entrega</strong><small>Ativa os campos de morada e telefone.</small></span></label>
+              <label><input id="schedulingEnabled" type="checkbox" /><span><strong>Agendamentos</strong><small>Permite agendar dentro do horário.</small></span></label>
+            </div>
+            <div class="settings-grid compact-grid">
+              <label><span>Pedido mínimo</span><div class="money-input"><input id="minimumOrder" type="number" min="0" step="0.01" /><b>€</b></div></label>
+              <label><span>Raio de entrega</span><div class="money-input"><input id="deliveryRadiusKm" type="number" min="0" step="0.1" /><b>km</b></div></label>
+              <label><span>Taxa de entrega</span><div class="money-input"><input id="deliveryFee" type="number" min="0" step="0.01" /><b>€</b></div></label>
+              <label><span>Espera prevista</span><div class="range-input"><input id="minimumWaitMinutes" type="number" min="0" /><i>a</i><input id="maximumWaitMinutes" type="number" min="0" /><b>min</b></div></label>
+              <label><span>Dias para agendar</span><input id="schedulingDaysAhead" type="number" min="1" max="45" /></label>
+              <label><span>Intervalo de agendamento</span><div class="money-input"><input id="schedulingIntervalMinutes" type="number" min="5" step="5" /><b>min</b></div></label>
+            </div>
+          </article>
+
+          <article class="settings-card">
+            <header><div><p class="eyebrow">Funcionamento</p><h2>Horários semanais</h2></div></header>
+            <div class="hours-list" id="hoursList"></div>
+          </article>
+
+          <article class="settings-card">
+            <header><div><p class="eyebrow">Caixa</p><h2>Pagamentos e experiência</h2></div></header>
+            <div class="payment-options">
+              <label><input data-payment-method="cash" type="checkbox" /><span>DINHEIRO</span></label>
+              <label><input data-payment-method="multibanco" type="checkbox" /><span>MULTIBANCO</span></label>
+              <label><input data-payment-method="mbway" type="checkbox" /><span>MB WAY</span></label>
+              <label><input data-payment-method="account" type="checkbox" /><span>CONTA</span></label>
+            </div>
+            <div class="toggle-grid">
+              <label><input id="productObservationsEnabled" type="checkbox" /><span><strong>Observações nos produtos</strong><small>Permite comentários personalizados.</small></span></label>
+              <label><input id="whatsappOrderCopyEnabled" type="checkbox" /><span><strong>Cópia por WhatsApp</strong><small>Guarda a preferência para futura integração.</small></span></label>
+            </div>
+          </article>
+
+          <article class="settings-card">
+            <header><div><p class="eyebrow">Impressão</p><h2>Impressora do Caixa</h2></div><span class="config-badge">QZ Tray</span></header>
+            <div class="settings-grid compact-grid">
+              <label class="span-2"><span>Impressora</span><input id="printerName" maxlength="120" /></label>
+              <label><span>Alias</span><input id="printerAlias" maxlength="60" /></label>
+              <label><span>Colunas</span><input id="printerColumns" type="number" min="24" max="80" /></label>
+              <label><span>Cópias</span><input id="printerCopies" type="number" min="1" max="5" /></label>
+              <label><span>Cor principal</span><input id="primaryColor" type="color" /></label>
+              <label><span>Cor secundária</span><input id="secondaryColor" type="color" /></label>
+            </div>
+            <div class="toggle-grid">
+              <label><input id="autoPrint" type="checkbox" /><span><strong>Impressão automática</strong><small>Abre a impressão ao concluir o pagamento.</small></span></label>
+              <label><input id="printDeliveryData" type="checkbox" /><span><strong>Dados de entrega</strong><small>Inclui morada e telefone no ticket.</small></span></label>
+            </div>
+          </article>
+
+          <footer class="settings-actions"><p class="form-message" id="settingsMessage" aria-live="polite"></p><button class="primary-button" id="saveSettingsButton" type="submit">Guardar configurações</button></footer>
+        </form>
       </section>
     </main>
 

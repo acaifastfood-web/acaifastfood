@@ -8,3 +8,4 @@ invoice-files/
 menu-items.json
 order-records.json
 stock-state.json
+*.json.bak

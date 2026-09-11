@@ -23,7 +23,7 @@ button { cursor: pointer; }
 .order-header {
   min-height: 78px; display: flex; align-items: center; justify-content: space-between; gap: 20px;
   padding: 12px clamp(16px, 3vw, 38px); color: #fff;
-  background: linear-gradient(125deg, #241020, #59174f 62%, #792518);
+  background: linear-gradient(125deg, #241020, var(--order-brand) 62%, var(--order-brand-2));
 }
 .order-brand { display: flex; align-items: center; gap: 13px; }
 .order-brand img { width: 54px; height: 54px; object-fit: contain; border-radius: 10px; padding: 4px; background: #fff; }

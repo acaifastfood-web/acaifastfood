@@ -42,6 +42,7 @@ const ORDER_RECORDS_PATH = path.join(DATA_DIR, "order-records.json");
 const MENU_ITEMS_PATH = path.join(DATA_DIR, "menu-items.json");
 const INVOICE_RECORDS_PATH = path.join(DATA_DIR, "invoice-records.json");
 const STOCK_STATE_PATH = path.join(DATA_DIR, "stock-state.json");
+const STORE_CONFIG_PATH = path.join(DATA_DIR, "store-config.json");
 const INVOICE_FILES_DIR = path.join(DATA_DIR, "invoice-files");
 const USERS_PATH = path.join(DATA_DIR, "app-users.json");
 const MAX_INVOICE_FILE_BYTES = 8 * 1024 * 1024;
@@ -233,6 +234,14 @@ http
 
       if (requestPath === "/api/stock-state/save" && request.method === "POST") {
         return await handleSaveStockState(request, response);
+      }
+
+      if (requestPath === "/api/store-config" && request.method === "GET") {
+        return sendJson(response, 200, readStoreConfig());
+      }
+
+      if (requestPath === "/api/store-config/save" && request.method === "POST") {
+        return await handleSaveStoreConfig(request, response);
       }
 
       if (requestPath === "/api/auth/login" && request.method === "POST") {
@@ -476,6 +485,11 @@ async function handleCreateOrder(request, response) {
   if (isDelivery && !deliveryPhone) return sendJson(response, 400, { error: "Indica o telefone da entrega." });
   const paymentMethod = tableNumber ? "" : normalizePaymentMethod(body.paymentMethod);
   const orderTotal = roundMoney(items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0));
+  const storeConfig = readStoreConfig();
+  if (!tableNumber && orderTotal < storeConfig.minimumOrder) return sendJson(response, 400, { error: `O pedido mínimo para retirada ou entrega é ${storeConfig.minimumOrder.toFixed(2).replace(".", ",")} €.` });
+  if (channel === "delivery" && !storeConfig.deliveryEnabled) return sendJson(response, 400, { error: "As entregas estão temporariamente desativadas." });
+  if (channel === "takeaway" && !storeConfig.pickupEnabled) return sendJson(response, 400, { error: "A retirada no local está temporariamente desativada." });
+  if (!tableNumber && !storeConfig.paymentMethods.includes(paymentMethod)) return sendJson(response, 400, { error: "Esta forma de pagamento não está disponível." });
   const cashReceived = paymentMethod === "cash" ? moneyValue(body.cashReceived) : 0;
   if (!tableNumber && !paymentMethod) return sendJson(response, 400, { error: "Escolhe a forma de pagamento." });
   if (paymentMethod === "cash" && cashReceived < orderTotal) return sendJson(response, 400, { error: "O valor recebido em dinheiro e inferior ao total do pedido." });
@@ -838,6 +852,63 @@ async function handleToggleMenuItem(request, response) {
 
 function isMenuManager(session) {
   return ["manager", "admin"].includes(normalizeRole(session?.role));
+}
+
+async function handleSaveStoreConfig(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+  if (!isMenuManager(session)) return sendJson(response, 403, { error: "Apenas a gestao pode alterar as configuracoes." });
+  const config = normalizeStoreConfig(body.config || {});
+  writeJsonAtomic(STORE_CONFIG_PATH, config);
+  return sendJson(response, 200, { config, updatedBy: session.name, updatedAt: new Date().toISOString() });
+}
+
+function readStoreConfig() {
+  try {
+    if (!fs.existsSync(STORE_CONFIG_PATH)) return normalizeStoreConfig({});
+    return normalizeStoreConfig(JSON.parse(fs.readFileSync(STORE_CONFIG_PATH, "utf8")));
+  } catch {
+    return normalizeStoreConfig({});
+  }
+}
+
+function normalizeStoreConfig(raw = {}) {
+  const defaults = {
+    name: "Açaí Fast Food",
+    address: { postalCode: "8125-173", street: "Rua da Abelheira", number: "66", complement: "Loja B - Edf Spol", locality: "Quarteira", municipality: "Loulé", country: "Portugal" },
+    taxNumber: "514939648", phone: "", email: "", timezone: "Europe/Lisbon",
+    servesTables: true, pickupEnabled: true, deliveryEnabled: true, deliveryRadiusKm: 5, deliveryFee: 0,
+    minimumOrder: 10, minimumWaitMinutes: 40, maximumWaitMinutes: 45,
+    schedulingEnabled: true, schedulingDaysAhead: 14, schedulingIntervalMinutes: 30,
+    paymentMethods: ["cash", "multibanco", "mbway", "account"],
+    productObservationsEnabled: true, customerLoginRequired: false, whatsappOrderCopyEnabled: true,
+    printing: { printerName: "SAM4S GIANT-100", alias: "CAIXA", columns: 45, copies: 2, autoPrint: true, printStoreName: true, printOrderNumber: true, printOrderChannel: true, printDeliveryEstimate: true, printDeliveryData: true, printVariationPrices: true },
+    theme: { primaryColor: "#e76d08", secondaryColor: "#ff0019", roundedLogo: true },
+  };
+  const hours = {};
+  for (const day of ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]) {
+    const source = raw.hours?.[day] || {};
+    const weekend = ["saturday", "sunday"].includes(day);
+    hours[day] = { enabled: source.enabled !== false, start: /^\d{2}:\d{2}$/.test(source.start) ? source.start : (weekend ? "13:00" : "12:00"), end: /^\d{2}:\d{2}$/.test(source.end) ? source.end : "22:00" };
+  }
+  const allowedPayments = ["cash", "multibanco", "mbway", "account"];
+  const paymentMethods = [...new Set((Array.isArray(raw.paymentMethods) ? raw.paymentMethods : defaults.paymentMethods).filter((entry) => allowedPayments.includes(entry)))];
+  const clean = (value, fallback = "", limit = 160) => String(value ?? fallback).trim().slice(0, limit);
+  return {
+    ...defaults, ...raw,
+    name: clean(raw.name, defaults.name, 100),
+    address: { ...defaults.address, ...(raw.address || {}), postalCode: clean(raw.address?.postalCode, defaults.address.postalCode, 20), street: clean(raw.address?.street, defaults.address.street), number: clean(raw.address?.number, defaults.address.number, 20), complement: clean(raw.address?.complement, defaults.address.complement), locality: clean(raw.address?.locality, defaults.address.locality, 80), municipality: clean(raw.address?.municipality, defaults.address.municipality, 80), country: clean(raw.address?.country, defaults.address.country, 60) },
+    taxNumber: clean(raw.taxNumber, defaults.taxNumber, 30), phone: clean(raw.phone, "", 40), email: clean(raw.email, "", 120), timezone: "Europe/Lisbon",
+    servesTables: raw.servesTables !== false, pickupEnabled: raw.pickupEnabled !== false, deliveryEnabled: raw.deliveryEnabled !== false,
+    deliveryRadiusKm: Math.max(0, numberValue(raw.deliveryRadiusKm ?? defaults.deliveryRadiusKm)), deliveryFee: Math.max(0, moneyValue(raw.deliveryFee ?? defaults.deliveryFee)),
+    minimumOrder: Math.max(0, moneyValue(raw.minimumOrder ?? defaults.minimumOrder)), minimumWaitMinutes: Math.max(0, Math.round(numberValue(raw.minimumWaitMinutes ?? defaults.minimumWaitMinutes))), maximumWaitMinutes: Math.max(0, Math.round(numberValue(raw.maximumWaitMinutes ?? defaults.maximumWaitMinutes))),
+    schedulingEnabled: raw.schedulingEnabled !== false, schedulingDaysAhead: Math.min(45, Math.max(1, Math.round(numberValue(raw.schedulingDaysAhead ?? defaults.schedulingDaysAhead)))), schedulingIntervalMinutes: Math.max(5, Math.round(numberValue(raw.schedulingIntervalMinutes ?? defaults.schedulingIntervalMinutes))),
+    hours, paymentMethods: paymentMethods.length ? paymentMethods : defaults.paymentMethods,
+    productObservationsEnabled: raw.productObservationsEnabled !== false, customerLoginRequired: raw.customerLoginRequired === true, whatsappOrderCopyEnabled: raw.whatsappOrderCopyEnabled !== false,
+    printing: { ...defaults.printing, ...(raw.printing || {}), printerName: clean(raw.printing?.printerName, defaults.printing.printerName, 120), alias: clean(raw.printing?.alias, defaults.printing.alias, 60), columns: Math.max(24, Math.min(80, Math.round(numberValue(raw.printing?.columns ?? defaults.printing.columns)))), copies: Math.max(1, Math.min(5, Math.round(numberValue(raw.printing?.copies ?? defaults.printing.copies)))) },
+    theme: { ...defaults.theme, ...(raw.theme || {}), primaryColor: /^#[0-9a-f]{6}$/i.test(raw.theme?.primaryColor) ? raw.theme.primaryColor : defaults.theme.primaryColor, secondaryColor: /^#[0-9a-f]{6}$/i.test(raw.theme?.secondaryColor) ? raw.theme.secondaryColor : defaults.theme.secondaryColor },
+  };
 }
 
 function normalizeMenuItem(rawItem) {

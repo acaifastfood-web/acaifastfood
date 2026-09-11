@@ -5,6 +5,7 @@ let auth = loadAuth();
 let items = [];
 let editingId = "";
 let stockItems = [];
+let storeConfig = null;
 
 const el = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.id, node]));
 
@@ -24,6 +25,7 @@ el.centerFilter.addEventListener("change", renderProducts);
 el.statusFilter.addEventListener("change", renderProducts);
 el.exportButton.addEventListener("click", exportCsv);
 el.addRecipeIngredient.addEventListener("click", addRecipeIngredient);
+el.storeSettingsForm.addEventListener("submit", saveStoreSettings);
 document.querySelector(".section-tabs").addEventListener("click", switchView);
 el.categoryList.addEventListener("click", (event) => {
   const card = event.target.closest("[data-category]");
@@ -67,9 +69,59 @@ async function loadMenu() {
   }
   items = Array.isArray(result.items) ? result.items : [];
   try { const stock = await fetch("/api/stock-state").then((response) => response.json()); stockItems = Array.isArray(stock.items) ? stock.items : []; } catch { stockItems = []; }
+  await loadStoreSettings();
   el.stockIngredientSelect.innerHTML = '<option value="">Selecionar ingrediente do stock</option>' + stockItems.sort((a,b) => localeSort(a.name,b.name)).map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)} · ${Number(item.quantity || 0)} ${escapeHtml(item.unit || "")}</option>`).join("");
   el.authOverlay.hidden = true; renderAll();
 }
+
+const dayLabels = { monday:"Segunda-feira", tuesday:"Terça-feira", wednesday:"Quarta-feira", thursday:"Quinta-feira", friday:"Sexta-feira", saturday:"Sábado", sunday:"Domingo" };
+
+async function loadStoreSettings() {
+  try {
+    storeConfig = await fetch("/api/store-config").then((response) => { if (!response.ok) throw new Error(); return response.json(); });
+    renderStoreSettings();
+  } catch { toast("Não foi possível carregar as configurações da loja."); }
+}
+
+function renderStoreSettings() {
+  if (!storeConfig) return;
+  const address = storeConfig.address || {};
+  el.storeName.value = storeConfig.name || ""; el.storeTaxNumber.value = storeConfig.taxNumber || ""; el.storePhone.value = storeConfig.phone || ""; el.storeEmail.value = storeConfig.email || "";
+  el.storeStreet.value = address.street || ""; el.storeNumber.value = address.number || ""; el.storePostalCode.value = address.postalCode || ""; el.storeComplement.value = address.complement || ""; el.storeLocality.value = address.locality || ""; el.storeMunicipality.value = address.municipality || "";
+  for (const id of ["servesTables","pickupEnabled","deliveryEnabled","schedulingEnabled","productObservationsEnabled","whatsappOrderCopyEnabled"]) el[id].checked = storeConfig[id] !== false;
+  for (const id of ["minimumOrder","deliveryRadiusKm","deliveryFee","minimumWaitMinutes","maximumWaitMinutes","schedulingDaysAhead","schedulingIntervalMinutes"]) el[id].value = storeConfig[id] ?? "";
+  document.querySelectorAll("[data-payment-method]").forEach((input) => { input.checked = (storeConfig.paymentMethods || []).includes(input.dataset.paymentMethod); });
+  const printing = storeConfig.printing || {}; el.printerName.value = printing.printerName || ""; el.printerAlias.value = printing.alias || ""; el.printerColumns.value = printing.columns || 45; el.printerCopies.value = printing.copies || 2; el.autoPrint.checked = printing.autoPrint !== false; el.printDeliveryData.checked = printing.printDeliveryData !== false;
+  const theme = storeConfig.theme || {}; el.primaryColor.value = theme.primaryColor || "#e76d08"; el.secondaryColor.value = theme.secondaryColor || "#ff0019";
+  el.hoursList.innerHTML = Object.entries(dayLabels).map(([day,label]) => { const hours=storeConfig.hours?.[day] || {}; return `<div class="hours-row"><label class="day-toggle"><input data-hour-day="${day}" data-hour-field="enabled" type="checkbox" ${hours.enabled !== false ? "checked" : ""}/><strong>${label}</strong></label><label><span>Abre</span><input data-hour-day="${day}" data-hour-field="start" type="time" value="${escapeHtml(hours.start || "12:00")}"/></label><label><span>Fecha</span><input data-hour-day="${day}" data-hour-field="end" type="time" value="${escapeHtml(hours.end || "22:00")}"/></label></div>`; }).join("");
+  applyTheme(theme);
+}
+
+async function saveStoreSettings(event) {
+  event.preventDefault();
+  const paymentMethods = [...document.querySelectorAll("[data-payment-method]:checked")].map((input) => input.dataset.paymentMethod);
+  if (!paymentMethods.length) return setMessage(el.settingsMessage, "Selecione pelo menos uma forma de pagamento.");
+  const hours = {};
+  for (const day of Object.keys(dayLabels)) {
+    const field = (name) => document.querySelector(`[data-hour-day="${day}"][data-hour-field="${name}"]`);
+    hours[day] = { enabled: field("enabled").checked, start: field("start").value, end: field("end").value };
+  }
+  const config = {
+    ...(storeConfig || {}), name: el.storeName.value, taxNumber: el.storeTaxNumber.value, phone: el.storePhone.value, email: el.storeEmail.value, timezone: "Europe/Lisbon",
+    address: { ...(storeConfig?.address || {}), street:el.storeStreet.value, number:el.storeNumber.value, postalCode:el.storePostalCode.value, complement:el.storeComplement.value, locality:el.storeLocality.value, municipality:el.storeMunicipality.value, country:"Portugal" },
+    servesTables:el.servesTables.checked, pickupEnabled:el.pickupEnabled.checked, deliveryEnabled:el.deliveryEnabled.checked, schedulingEnabled:el.schedulingEnabled.checked,
+    minimumOrder:Number(el.minimumOrder.value), deliveryRadiusKm:Number(el.deliveryRadiusKm.value), deliveryFee:Number(el.deliveryFee.value), minimumWaitMinutes:Number(el.minimumWaitMinutes.value), maximumWaitMinutes:Number(el.maximumWaitMinutes.value), schedulingDaysAhead:Number(el.schedulingDaysAhead.value), schedulingIntervalMinutes:Number(el.schedulingIntervalMinutes.value), hours, paymentMethods,
+    productObservationsEnabled:el.productObservationsEnabled.checked, whatsappOrderCopyEnabled:el.whatsappOrderCopyEnabled.checked,
+    printing:{ ...(storeConfig?.printing || {}), printerName:el.printerName.value, alias:el.printerAlias.value, columns:Number(el.printerColumns.value), copies:Number(el.printerCopies.value), autoPrint:el.autoPrint.checked, printDeliveryData:el.printDeliveryData.checked },
+    theme:{ ...(storeConfig?.theme || {}), primaryColor:el.primaryColor.value, secondaryColor:el.secondaryColor.value },
+  };
+  el.saveSettingsButton.disabled = true; setMessage(el.settingsMessage, "A guardar…", true);
+  try { const result = await api("/api/store-config/save", { authToken:auth.token, config }); storeConfig = result.config; renderStoreSettings(); setMessage(el.settingsMessage, "Configurações guardadas.", true); toast("Caixa atualizado com as configurações da loja"); }
+  catch (error) { setMessage(el.settingsMessage, error.message); }
+  finally { el.saveSettingsButton.disabled = false; }
+}
+
+function applyTheme(theme = {}) { if (theme.primaryColor) document.documentElement.style.setProperty("--brand-primary", theme.primaryColor); if (theme.secondaryColor) document.documentElement.style.setProperty("--brand-secondary", theme.secondaryColor); }
 
 function addRecipeIngredient() {
   const name = el.stockIngredientSelect.value;
@@ -172,7 +224,13 @@ async function handleTableChange(event) {
 }
 
 function switchView(event) { const button = event.target.closest("[data-view]"); if (button) showView(button.dataset.view); }
-function showView(view) { document.querySelectorAll(".section-tabs [data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === view)); el.productsView.hidden = view !== "products"; el.categoriesView.hidden = view !== "categories"; }
+function showView(view) {
+  document.querySelectorAll(".section-tabs [data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
+  el.productsView.hidden = view !== "products"; el.categoriesView.hidden = view !== "categories"; el.settingsView.hidden = view !== "settings"; el.summaryGrid.hidden = view === "settings"; el.newProductButton.hidden = view === "settings";
+  const heading = document.querySelector(".page-heading h1"); const description = document.querySelector(".page-heading p:last-child");
+  heading.textContent = view === "settings" ? "Configurações da loja" : (view === "categories" ? "Categorias" : "Produtos");
+  description.textContent = view === "settings" ? "Defina atendimento, entrega, pagamentos, horários e impressão." : "Edite preços, categorias e disponibilidade do menu do Caixa.";
+}
 
 function exportCsv() {
   const rows = [["Produto","Código","Categoria","Centro de produção","À venda","Preço","Descrição"], ...filteredItems().map((item) => [item.name,item.code,item.category,item.productionCenter,item.active !== false ? "Sim" : "Não",Number(item.price).toFixed(2),item.variant])];

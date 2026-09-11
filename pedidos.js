@@ -4,6 +4,7 @@ if (window.location.protocol === "file:") {
 
 const AUTH_KEY = "acai-fast-food-auth-v1";
 let menu = window.ACAI_MENU || [];
+let storeConfig = { name:"Açaí Fast Food", minimumOrder:10, pickupEnabled:true, deliveryEnabled:true, servesTables:true, paymentMethods:["cash","multibanco","mbway","account"], minimumWaitMinutes:40, maximumWaitMinutes:45, printing:{ autoPrint:true }, theme:{} };
 
 let auth = loadAuth();
 let cart = [];
@@ -104,7 +105,7 @@ elements.acaiCustomizationForm.addEventListener("click", handleCustomizationQuan
 elements.acaiCustomizationForm.addEventListener("submit", confirmAcaiCustomization);
 elements.cancelAcaiCustomization.addEventListener("click", closeAcaiCustomization);
 
-renderCategories(); renderProducts(); renderTables(); renderCustomizationOptions(); setServiceMode(""); renderCart(); loadLoginUsers(); restoreSession();
+renderCategories(); renderProducts(); renderTables(); renderCustomizationOptions(); setServiceMode(""); renderCart(); loadStoreConfig(); loadLoginUsers(); restoreSession();
 setInterval(loadTableStatus, 5000);
 
 async function loadLoginUsers() {
@@ -122,6 +123,33 @@ async function loadLoginUsers() {
       elements.loginUserSelect.appendChild(group);
     }
   } catch { elements.loginUserSelect.innerHTML = '<option value="">Digitar utilizador manualmente</option>'; }
+}
+
+async function loadStoreConfig() {
+  try {
+    const response = await fetch("/api/store-config");
+    if (!response.ok) throw new Error();
+    storeConfig = { ...storeConfig, ...(await response.json()) };
+    applyStoreConfig();
+  } catch {}
+}
+
+function applyStoreConfig() {
+  const labels = { cash:"DINHEIRO", multibanco:"MULTIBANCO", mbway:"MB WAY", account:"CONTA" };
+  const methods = storeConfig.paymentMethods?.length ? storeConfig.paymentMethods : Object.keys(labels);
+  for (const select of [elements.paymentMethod, elements.tablePaymentMethod]) {
+    const previous = select.value;
+    select.innerHTML = methods.map((method) => `<option value="${method}">${labels[method]}</option>`).join("");
+    if (methods.includes(previous)) select.value = previous;
+  }
+  elements.mixedPaymentFields.querySelectorAll("[data-payment-part]").forEach((input) => { input.closest("label").hidden = !methods.includes(input.dataset.paymentPart); });
+  document.querySelector('[data-service-mode="tables"]').hidden = storeConfig.servesTables === false;
+  const pickupOption = elements.orderChannel.querySelector('option[value="takeaway"]'); const deliveryOption = elements.orderChannel.querySelector('option[value="delivery"]');
+  if (pickupOption) pickupOption.disabled = storeConfig.pickupEnabled === false; if (deliveryOption) deliveryOption.disabled = storeConfig.deliveryEnabled === false;
+  const primary = storeConfig.theme?.primaryColor; const secondary = storeConfig.theme?.secondaryColor;
+  if (primary) { document.documentElement.style.setProperty("--order-brand", primary); document.documentElement.style.setProperty("--order-orange", primary); }
+  if (secondary) { document.documentElement.style.setProperty("--order-brand-2", secondary); document.documentElement.style.setProperty("--order-red", secondary); }
+  updateDeliveryFields(); renderCart();
 }
 
 function selectLoginUser() {
@@ -376,7 +404,8 @@ async function closeSelectedTableAccount() {
       cashReceived,
       changeDue: result.payment.changeDue,
       operator: auth?.name || auth?.username || "Caixa",
-    }, true);
+      storeConfig,
+    }, storeConfig.printing?.autoPrint !== false);
     tableOrders = tableOrders.filter((order) => tableNumberFromOrder(order) !== selectedTable);
     if (!result.tableClosed) tableOrders.push(...result.orders);
     occupiedTables = new Set(tableOrders.map(tableNumberFromOrder)); selectedPaymentItems.clear();
@@ -769,6 +798,7 @@ async function sendOrder() {
     const deliveryAddress = elements.deliveryAddress.value.trim();
     const deliveryPhone = elements.deliveryPhone.value.trim();
     const changeRequired = isDelivery && paymentMethod === "cash" && elements.deliveryNeedsChange.value === "yes";
+    if (serviceMode !== "tables" && total < Number(storeConfig.minimumOrder || 0)) { setStatus(elements.orderStatus, `O pedido mínimo para retirada ou entrega é ${money(storeConfig.minimumOrder)}.`, "error"); return; }
     if (isDelivery && !deliveryAddress) { setStatus(elements.orderStatus, "Indica a morada da entrega.", "error"); elements.deliveryAddress.focus(); return; }
     if (isDelivery && !deliveryPhone) { setStatus(elements.orderStatus, "Indica o telefone da entrega.", "error"); elements.deliveryPhone.focus(); return; }
     let cashReceived = 0;
@@ -802,7 +832,10 @@ async function sendOrder() {
       cashReceived: result.order.cashReceived,
       changeDue: result.order.changeDue,
       operator: result.order.createdBy || auth?.name || auth?.username || "Caixa",
-    }, true);
+      storeConfig,
+      deliveryAddress: result.order.deliveryAddress,
+      deliveryPhone: result.order.deliveryPhone,
+    }, storeConfig.printing?.autoPrint !== false);
     cart = []; elements.customerName.value = ""; elements.orderNotes.value = ""; elements.paymentMethod.value = "cash";
     elements.deliveryAddress.value = ""; elements.deliveryPhone.value = ""; elements.deliveryNeedsChange.value = "no"; elements.deliveryCashAmount.value = "";
     elements.orderTable.value = "";
@@ -840,8 +873,11 @@ function writeCustomerReceipt(printWindow, receipt, shouldPrint) {
   }).join("");
   const receivedLine = Number(receipt.cashReceived || 0) > 0 ? `<div class="line"><span>Recebido</span><span>${money(receipt.cashReceived)}</span></div><div class="line"><span>Troco</span><span>${money(receipt.changeDue)}</span></div>` : "";
   const orderText = (receipt.orderNumbers || []).length ? `Pedido(s): ${(receipt.orderNumbers || []).map((number) => `#${number}`).join(", ")}` : "";
+  const config = receipt.storeConfig || storeConfig || {}; const address = config.address || {};
+  const storeAddress = [address.street, address.number, address.complement, address.postalCode, address.locality].filter(Boolean).join(", ");
+  const deliveryBlock = receipt.deliveryAddress ? `<div class="delivery"><strong>ENTREGA</strong><br>${escapeHtml(receipt.deliveryAddress)}${receipt.deliveryPhone ? `<br>Tel.: ${escapeHtml(receipt.deliveryPhone)}` : ""}<br>Previsão: ${Number(config.minimumWaitMinutes || 40)}–${Number(config.maximumWaitMinutes || 45)} min</div>` : "";
   printWindow.document.open();
-  printWindow.document.write(`<!doctype html><html lang="pt-PT"><head><meta charset="utf-8"><title>Cupão ${escapeHtml(receipt.reference)}</title><style>@page{size:80mm auto;margin:4mm}*{box-sizing:border-box}body{font:12px ui-monospace,monospace;color:#000;margin:0}h1{text-align:center;font-size:18px;margin:0}.store{text-align:center;margin:4px 0}.doc{text-align:center;border-block:1px dashed #000;margin:9px 0;padding:7px 0}.doc strong{display:block;font-size:14px}.warning{font-weight:950;margin-top:4px}.meta{display:flex;justify-content:space-between;gap:8px;margin-bottom:7px}table{width:100%;border-collapse:collapse}th,td{padding:5px 0;border-bottom:1px dotted #aaa;vertical-align:top}th{text-align:left;border-bottom:1px solid #000}th:nth-child(2),th:nth-child(3),td:nth-child(2),td:nth-child(3){padding-left:8px;text-align:right}th:nth-child(2),td:nth-child(2){width:38px}th:nth-child(3),td:nth-child(3){width:67px}small{display:block;margin-top:2px}.line{display:flex;justify-content:space-between;padding:2px 0}.total{border-top:2px solid #000;margin-top:6px;padding-top:6px;font-size:17px;font-weight:950}.payment{text-align:center;border-block:1px dashed #000;margin-top:9px;padding:7px 0}.fake-qr{width:74px;height:74px;margin:12px auto 5px;border:7px double #000;background:repeating-linear-gradient(45deg,#000 0 5px,#fff 5px 10px)}.qr-label,.footer{text-align:center}.footer{margin-top:10px;line-height:1.5}</style></head><body><h1>AÇAÍ FAST FOOD</h1><div class="store">Cupão do cliente</div><div class="doc"><strong>DOCUMENTO DE TESTE</strong>${escapeHtml(receipt.reference)}<div class="warning">SEM VALIDADE FISCAL</div></div><div class="meta"><span>${new Intl.DateTimeFormat("pt-PT", { dateStyle: "short", timeStyle: "short" }).format(new Date(receipt.date || Date.now()))}</span><span>${escapeHtml(receipt.service || "")}</span></div>${receipt.customerName ? `<div>Cliente: ${escapeHtml(receipt.customerName)}</div>` : ""}<div>${escapeHtml(orderText)}</div><table><thead><tr><th>Descrição</th><th>Qtd.</th><th>Total</th></tr></thead><tbody>${itemRows}</tbody></table><div class="line total"><span>TOTAL</span><span>${money(receipt.total)}</span></div><div class="payment"><strong>Pagamento: ${escapeHtml(receipt.paymentLabel || "")}</strong>${receivedLine}</div><div class="fake-qr"></div><div class="qr-label">QR ILUSTRATIVO · SEM VALIDADE</div><div class="footer">Obrigado pela sua preferência!<br>Operador: ${escapeHtml(receipt.operator || "Caixa")}</div></body></html>`);
+  printWindow.document.write(`<!doctype html><html lang="pt-PT"><head><meta charset="utf-8"><title>Cupão ${escapeHtml(receipt.reference)}</title><style>@page{size:80mm auto;margin:4mm}*{box-sizing:border-box}body{font:12px ui-monospace,monospace;color:#000;margin:0}h1{text-align:center;font-size:18px;margin:0}.store{text-align:center;margin:4px 0;line-height:1.35}.doc{text-align:center;border-block:1px dashed #000;margin:9px 0;padding:7px 0}.doc strong{display:block;font-size:14px}.warning{font-weight:950;margin-top:4px}.meta{display:flex;justify-content:space-between;gap:8px;margin-bottom:7px}.delivery{border:1px dashed #000;margin:8px 0;padding:7px;line-height:1.45}table{width:100%;border-collapse:collapse}th,td{padding:5px 0;border-bottom:1px dotted #aaa;vertical-align:top}th{text-align:left;border-bottom:1px solid #000}th:nth-child(2),th:nth-child(3),td:nth-child(2),td:nth-child(3){padding-left:8px;text-align:right}th:nth-child(2),td:nth-child(2){width:38px}th:nth-child(3),td:nth-child(3){width:67px}small{display:block;margin-top:2px}.line{display:flex;justify-content:space-between;padding:2px 0}.total{border-top:2px solid #000;margin-top:6px;padding-top:6px;font-size:17px;font-weight:950}.payment{text-align:center;border-block:1px dashed #000;margin-top:9px;padding:7px 0}.fake-qr{width:74px;height:74px;margin:12px auto 5px;border:7px double #000;background:repeating-linear-gradient(45deg,#000 0 5px,#fff 5px 10px)}.qr-label,.footer{text-align:center}.footer{margin-top:10px;line-height:1.5}</style></head><body><h1>${escapeHtml(config.name || "AÇAÍ FAST FOOD")}</h1><div class="store">${escapeHtml(storeAddress)}${config.taxNumber ? `<br>NIF: ${escapeHtml(config.taxNumber)}` : ""}</div><div class="doc"><strong>DOCUMENTO DE TESTE</strong>${escapeHtml(receipt.reference)}<div class="warning">SEM VALIDADE FISCAL</div></div><div class="meta"><span>${new Intl.DateTimeFormat("pt-PT", { dateStyle: "short", timeStyle: "short", timeZone:"Europe/Lisbon" }).format(new Date(receipt.date || Date.now()))}</span><span>${escapeHtml(receipt.service || "")}</span></div>${receipt.customerName ? `<div>Cliente: ${escapeHtml(receipt.customerName)}</div>` : ""}<div>${escapeHtml(orderText)}</div>${deliveryBlock}<table><thead><tr><th>Descrição</th><th>Qtd.</th><th>Total</th></tr></thead><tbody>${itemRows}</tbody></table><div class="line total"><span>TOTAL</span><span>${money(receipt.total)}</span></div><div class="payment"><strong>Pagamento: ${escapeHtml(receipt.paymentLabel || "")}</strong>${receivedLine}</div><div class="fake-qr"></div><div class="qr-label">QR ILUSTRATIVO · SEM VALIDADE</div><div class="footer">Obrigado pela sua preferência!<br>Operador: ${escapeHtml(receipt.operator || "Caixa")}</div></body></html>`);
   printWindow.document.close();
   if (shouldPrint) setTimeout(() => { printWindow.focus(); printWindow.print(); }, 180);
 }

@@ -1,0 +1,91 @@
+{
+  "name": "Açaí Fast Food",
+  "address": {
+    "postalCode": "8125-173",
+    "street": "Rua da Abelheira",
+    "number": "66",
+    "complement": "Loja B - Edf Spol",
+    "locality": "Quarteira",
+    "municipality": "Loulé",
+    "country": "Portugal"
+  },
+  "taxNumber": "514939648",
+  "phone": "",
+  "email": "",
+  "timezone": "Europe/Lisbon",
+  "servesTables": true,
+  "pickupEnabled": true,
+  "deliveryEnabled": true,
+  "deliveryRadiusKm": 5,
+  "deliveryFee": 0,
+  "minimumOrder": 10,
+  "minimumWaitMinutes": 40,
+  "maximumWaitMinutes": 45,
+  "schedulingEnabled": true,
+  "schedulingDaysAhead": 14,
+  "schedulingIntervalMinutes": 30,
+  "paymentMethods": [
+    "cash",
+    "multibanco",
+    "mbway",
+    "account"
+  ],
+  "productObservationsEnabled": true,
+  "customerLoginRequired": false,
+  "whatsappOrderCopyEnabled": true,
+  "printing": {
+    "printerName": "SAM4S GIANT-100",
+    "alias": "CAIXA",
+    "columns": 45,
+    "copies": 2,
+    "autoPrint": true,
+    "printStoreName": true,
+    "printOrderNumber": true,
+    "printOrderChannel": true,
+    "printDeliveryEstimate": true,
+    "printDeliveryData": true,
+    "printVariationPrices": true
+  },
+  "theme": {
+    "primaryColor": "#e76d08",
+    "secondaryColor": "#ff0019",
+    "roundedLogo": true
+  },
+  "hours": {
+    "monday": {
+      "enabled": true,
+      "start": "12:00",
+      "end": "22:00"
+    },
+    "tuesday": {
+      "enabled": true,
+      "start": "12:00",
+      "end": "22:00"
+    },
+    "wednesday": {
+      "enabled": true,
+      "start": "12:00",
+      "end": "22:00"
+    },
+    "thursday": {
+      "enabled": true,
+      "start": "12:00",
+      "end": "22:00"
+    },
+    "friday": {
+      "enabled": true,
+      "start": "12:00",
+      "end": "22:00"
+    },
+    "saturday": {
+      "enabled": true,
+      "start": "13:00",
+      "end": "22:00"
+    },
+    "sunday": {
+      "enabled": true,
+      "start": "13:00",
+      "end": "22:00"
+    }
+  }
+}
