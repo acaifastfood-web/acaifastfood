@@ -6,7 +6,7 @@
     <title>Caixa e Pedidos | Açaí Fast Food</title>
     <meta name="theme-color" content="#5a174f" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="orders.css?v=20260912-canais-atendimento" />
+    <link rel="stylesheet" href="orders.css?v=20260912-central-pedidos" />
   </head>
   <body>
     <header class="order-header">
@@ -16,6 +16,7 @@
       </div>
       <div class="header-tools">
         <span class="operator-pill" id="operatorName">Sem sessão</span>
+        <button class="header-link header-orders-button" id="fulfillmentOrdersButton" type="button">Retiradas e entregas</button>
         <a class="header-link" href="kds.html">Abrir KDS</a>
         <a class="header-link" href="index.html">Apps</a>
         <button class="header-button" id="logoutButton" type="button">Sair</button>
@@ -170,7 +171,21 @@
         <div class="table-change-result" id="tableChangeResult" hidden><span>Troco</span><strong id="tableChangeAmount">0,00 €</strong></div>
       </section>
       <p class="dialog-message" id="tableAccountMessage"></p>
-      <footer><button class="close-table-account-button" id="closeTableAccountFinalButton" type="button">Pagar itens selecionados</button><span></span><button id="continueTableButton" type="button">Continuar nesta mesa</button></footer>
+      <footer><button class="close-table-account-button" id="closeTableAccountFinalButton" type="button">Pagar itens selecionados</button><button id="printTableAccountButton" type="button">Imprimir conta</button><button id="continueTableButton" type="button">Continuar nesta mesa</button></footer>
+    </dialog>
+
+    <dialog class="fulfillment-orders-dialog" id="fulfillmentOrdersDialog">
+      <header><div><span>Consulta no Caixa</span><strong>Retiradas e entregas</strong></div><button id="closeFulfillmentOrdersButton" type="button" aria-label="Fechar">×</button></header>
+      <div class="fulfillment-toolbar">
+        <label>Pesquisar<input id="fulfillmentSearch" type="search" placeholder="Pedido, cliente, telefone ou morada" /></label>
+        <label>Canal<select id="fulfillmentChannelFilter"><option value="all">Retirada e entrega</option><option value="takeaway">Retirada</option><option value="delivery">Entrega</option></select></label>
+        <label>Estado<select id="fulfillmentStatusFilter"><option value="pending">Pendentes</option><option value="delivered">Concluídos</option><option value="all">Todos</option></select></label>
+        <button id="refreshFulfillmentOrdersButton" type="button">Atualizar</button>
+      </div>
+      <div class="fulfillment-summary" id="fulfillmentSummary">A carregar pedidos…</div>
+      <div class="fulfillment-orders-list" id="fulfillmentOrdersList"></div>
+      <p class="dialog-message" id="fulfillmentOrdersMessage"></p>
+      <footer><span>Pedidos do dia atual</span><button id="closeFulfillmentOrdersFooterButton" type="button">Voltar ao Caixa</button></footer>
     </dialog>
 
     <section class="auth-screen" id="authScreen">
@@ -188,6 +203,6 @@
     </section>
     <div class="toast" id="toast" hidden></div>
     <script src="menu-data.js?v=20260804-repetir-complementos"></script>
-    <script src="pedidos.js?v=20260912-canais-atendimento"></script>
+    <script src="pedidos.js?v=20260912-central-pedidos"></script>
   </body>
 </html>

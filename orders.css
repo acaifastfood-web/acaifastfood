@@ -404,6 +404,45 @@ body:not(.kds-body) .auth-screen, body:not(.kds-body) .acai-custom-dialog { colo
 .cancel-order-body { padding: 15px; }.cancel-order-body > p { margin: 0 0 13px; color: #c5c7ca; font-size: .78rem; line-height: 1.45; }.cancel-order-body label { display: grid; gap: 6px; color: #d9dbde; font-size: .72rem; font-weight: 900; }.cancel-order-body textarea { width: 100%; border: 1px solid #66696e; border-radius: 3px; background: #f3f3f2; color: #171819; padding: 9px 10px; resize: vertical; }
 .cancel-order-body label > span { color: #9da1a6; font-weight: 700; }
 .cancel-order-dialog > footer { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 10px 15px 14px; border-top: 1px solid #484a4e; background: #242528; }.cancel-order-dialog > footer button { min-height: 42px; border: 1px solid #5a5d62; border-radius: 3px; background: #3c3e42; color: #fff; font-weight: 900; }.cancel-order-dialog > footer .confirm-delete-order { border-color: #c84e4e; background: linear-gradient(#ce4545,#8d2929); }.cancel-order-dialog > footer button:disabled { opacity: .45; }
+.header-orders-button { font: inherit; cursor: pointer; }
+.fulfillment-orders-dialog { width: min(980px,calc(100vw - 24px)); max-height: 90vh; padding: 0; border: 1px solid #555a53; border-radius: 5px; background: #20221f; color: #fff; box-shadow: 0 24px 75px rgba(0,0,0,.72); }
+.fulfillment-orders-dialog::backdrop { background: rgba(0,0,0,.76); }
+.fulfillment-orders-dialog > header { display:flex; align-items:center; justify-content:space-between; padding:14px 16px; border-bottom:3px solid #d4b91f; background:linear-gradient(#333630,#252723); }
+.fulfillment-orders-dialog > header span,.fulfillment-orders-dialog > header strong { display:block; }
+.fulfillment-orders-dialog > header span { color:#efd94e; font-size:.66rem; font-weight:900; text-transform:uppercase; }
+.fulfillment-orders-dialog > header strong { margin-top:3px; font-size:1.25rem; }
+.fulfillment-orders-dialog > header button { width:36px; height:36px; border:1px solid #666b63; border-radius:3px; background:#30332f; color:#fff; font-size:1.4rem; }
+.fulfillment-toolbar { display:grid; grid-template-columns:2fr 1fr 1fr auto; gap:8px; align-items:end; padding:11px 13px; border-bottom:1px solid #50544e; background:#2a2d29; }
+.fulfillment-toolbar label { display:grid; gap:5px; color:#c9cdc6; font-size:.68rem; font-weight:900; text-transform:uppercase; }
+.fulfillment-toolbar input,.fulfillment-toolbar select { min-height:38px; border:1px solid #696e66; border-radius:3px; background:#f4f4f1; color:#191a18; padding:0 9px; font:inherit; }
+.fulfillment-toolbar button { min-height:38px; border:1px solid #6b8d4e; border-radius:3px; background:linear-gradient(#669348,#436b2d); color:#fff; padding:0 14px; font-weight:900; }
+.fulfillment-summary { padding:8px 13px; border-bottom:1px solid #484c46; color:#d5d8d2; font-size:.74rem; font-weight:850; }
+.fulfillment-orders-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; min-height:260px; max-height:55vh; overflow:auto; padding:10px; }
+.fulfillment-order { border:2px solid #d4ba26; border-radius:4px; background:#2b2e2a; padding:10px; box-shadow:0 3px 8px rgba(0,0,0,.3); }
+.fulfillment-order.channel-delivery { border-color:#df4148; }
+.fulfillment-order.status-delivered { opacity:.7; border-color:#5d9c4b; }
+.fulfillment-order-head,.fulfillment-order-head > div,.fulfillment-order-total,.fulfillment-order-actions { display:flex; align-items:center; }
+.fulfillment-order-head,.fulfillment-order-total { justify-content:space-between; gap:8px; }
+.fulfillment-order-head > div { gap:7px; }
+.fulfillment-order-head strong { font-size:1.2rem; }
+.fulfillment-order-head span,.fulfillment-order-head b { border-radius:3px; padding:4px 7px; font-size:.65rem; text-transform:uppercase; }
+.fulfillment-order-head span { background:#c4a814; color:#1b1808; }
+.channel-delivery .fulfillment-order-head span { background:#c62b33; color:#fff; }
+.fulfillment-order-head b { background:#555a53; color:#fff; }
+.status-delivered .fulfillment-order-head b { background:#4f8b3d; }
+.fulfillment-order-head time { color:#c6cac3; font-size:.72rem; font-weight:800; }
+.fulfillment-order p { margin:9px 0 5px; color:#fff; font-size:.78rem; font-weight:850; }
+.fulfillment-order > small { display:block; min-height:32px; color:#c9cdc7; line-height:1.4; }
+.fulfillment-order-total { margin-top:8px; padding-top:8px; border-top:1px solid #4a4e48; }
+.fulfillment-order-total strong { font-size:1rem; }
+.fulfillment-order-total span { color:#d7d9d5; font-size:.68rem; font-weight:850; }
+.fulfillment-order-actions { justify-content:flex-end; gap:7px; margin-top:9px; }
+.fulfillment-order-actions button { min-height:36px; border:1px solid #737870; border-radius:3px; background:#4b4f49; color:#fff; padding:0 11px; font-weight:900; }
+.fulfillment-order-actions .complete-fulfillment { border-color:#66a54d; background:linear-gradient(#68a64c,#417c2e); }
+.fulfillment-empty { grid-column:1/-1; display:grid; place-content:center; gap:5px; min-height:230px; color:#9ca098; text-align:center; }
+.fulfillment-empty strong { color:#e3e5e1; }
+.fulfillment-orders-dialog > footer { display:flex; justify-content:space-between; align-items:center; padding:10px 13px; border-top:1px solid #4c504a; background:#292c28; color:#aeb2ab; font-size:.7rem; }
+.fulfillment-orders-dialog > footer button { min-height:36px; border:1px solid #666b63; border-radius:3px; background:#40443e; color:#fff; padding:0 15px; font-weight:850; }
 .dialog-product-actions { grid-template-columns: 1fr 1fr; }
 .dialog-order-actions { grid-template-columns: 1fr 1fr; background: #17181a; }
 .dialog-action { min-height: 42px; border: 1px solid #5a5d62; border-radius: 3px; color: #fff; font-size: .72rem; font-weight: 900; text-transform: uppercase; }
@@ -442,4 +481,7 @@ body:not(.kds-body) .auth-screen, body:not(.kds-body) .acai-custom-dialog { colo
   .custom-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .combo-fields { grid-template-columns: 1fr; }
   .field.full { grid-column: auto; }
+  .fulfillment-toolbar { grid-template-columns:1fr 1fr; }
+  .fulfillment-toolbar label:first-child { grid-column:1/-1; }
+  .fulfillment-orders-list { grid-template-columns:1fr; }
 }

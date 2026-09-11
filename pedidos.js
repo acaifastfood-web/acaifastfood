@@ -16,6 +16,7 @@ let occupiedTables = new Set();
 let tableOrders = [];
 let selectedPaymentItems = new Set();
 let customizingProductId = "";
+let fulfillmentOrders = [];
 const customizableCategories = new Set(["Açaí", "Pastéis", "Combos", "Hambúrgueres", "Tapiocas", "Batidos"]);
 
 const acaiCustomization = {
@@ -58,6 +59,11 @@ const elements = {
   toggleAllPaymentItems: document.querySelector("#toggleAllPaymentItems"),
   tablePaymentMethodField: document.querySelector("#tablePaymentMethodField"), mixedPaymentToggle: document.querySelector("#mixedPaymentToggle"),
   mixedPaymentFields: document.querySelector("#mixedPaymentFields"), mixedPaymentTotal: document.querySelector("#mixedPaymentTotal"), mixedPaymentRemaining: document.querySelector("#mixedPaymentRemaining"),
+  fulfillmentOrdersButton: document.querySelector("#fulfillmentOrdersButton"), fulfillmentOrdersDialog: document.querySelector("#fulfillmentOrdersDialog"),
+  closeFulfillmentOrdersButton: document.querySelector("#closeFulfillmentOrdersButton"), closeFulfillmentOrdersFooterButton: document.querySelector("#closeFulfillmentOrdersFooterButton"),
+  fulfillmentSearch: document.querySelector("#fulfillmentSearch"), fulfillmentChannelFilter: document.querySelector("#fulfillmentChannelFilter"), fulfillmentStatusFilter: document.querySelector("#fulfillmentStatusFilter"),
+  refreshFulfillmentOrdersButton: document.querySelector("#refreshFulfillmentOrdersButton"), fulfillmentSummary: document.querySelector("#fulfillmentSummary"), fulfillmentOrdersList: document.querySelector("#fulfillmentOrdersList"), fulfillmentOrdersMessage: document.querySelector("#fulfillmentOrdersMessage"),
+  printTableAccountButton: document.querySelector("#printTableAccountButton"),
 };
 
 elements.loginForm.addEventListener("submit", login);
@@ -96,6 +102,15 @@ elements.toggleAllPaymentItems.addEventListener("click", toggleAllPaymentItems);
 elements.tableAccountOrders.addEventListener("change", handlePaymentItemSelection);
 elements.mixedPaymentToggle.addEventListener("change", updateTablePayment);
 elements.mixedPaymentFields.addEventListener("input", updateTablePayment);
+elements.printTableAccountButton.addEventListener("click", printTableAccount);
+elements.fulfillmentOrdersButton.addEventListener("click", openFulfillmentOrders);
+elements.closeFulfillmentOrdersButton.addEventListener("click", closeFulfillmentOrders);
+elements.closeFulfillmentOrdersFooterButton.addEventListener("click", closeFulfillmentOrders);
+elements.refreshFulfillmentOrdersButton.addEventListener("click", loadFulfillmentOrders);
+elements.fulfillmentSearch.addEventListener("input", renderFulfillmentOrders);
+elements.fulfillmentChannelFilter.addEventListener("change", renderFulfillmentOrders);
+elements.fulfillmentStatusFilter.addEventListener("change", renderFulfillmentOrders);
+elements.fulfillmentOrdersList.addEventListener("click", handleFulfillmentOrderAction);
 elements.orderChannel.addEventListener("change", updateDeliveryFields);
 elements.paymentMethod.addEventListener("change", updateDeliveryFields);
 elements.deliveryNeedsChange.addEventListener("change", updateDeliveryFields);
@@ -372,6 +387,109 @@ async function transferTableConsumption() {
 
 function closeTableAccountDialog() {
   if (elements.tableAccountDialog.open) elements.tableAccountDialog.close();
+}
+
+function printTableAccount() {
+  const account = ordersForTable(selectedTable);
+  const items = account.flatMap((order) => (order.items || [])
+    .filter((item) => item.itemStatus !== "cancelled" && unpaidItemQuantity(item))
+    .map((item) => ({ ...item, quantity: unpaidItemQuantity(item) })));
+  if (!items.length) return showToast("Esta mesa não possui itens por pagar.");
+  const printWindow = window.open("", "_blank", "width=420,height=760");
+  if (!printWindow) return showToast("Permite pop-ups para imprimir a conta.");
+  writeCustomerReceipt(printWindow, {
+    reference: `CONTA-M${selectedTable}`,
+    orderNumbers: account.map((order) => order.number),
+    date: new Date().toISOString(), service: `Mesa ${selectedTable}`,
+    customerName: account.find((order) => order.customerName)?.customerName || "",
+    items, total: unpaidAccountTotal(account), paymentLabel: "CONTA EM ABERTO",
+    cashReceived: 0, changeDue: 0, operator: auth?.user?.name || auth?.user?.username || "Caixa", storeConfig,
+  }, true);
+}
+
+async function openFulfillmentOrders() {
+  elements.fulfillmentOrdersMessage.textContent = "";
+  if (!elements.fulfillmentOrdersDialog.open) elements.fulfillmentOrdersDialog.showModal();
+  await loadFulfillmentOrders();
+  setTimeout(() => elements.fulfillmentSearch.focus(), 50);
+}
+
+function closeFulfillmentOrders() {
+  if (elements.fulfillmentOrdersDialog.open) elements.fulfillmentOrdersDialog.close();
+}
+
+async function loadFulfillmentOrders() {
+  if (!auth?.token) return showLogin("Entra novamente para consultar os pedidos.");
+  elements.refreshFulfillmentOrdersButton.disabled = true;
+  elements.fulfillmentOrdersMessage.textContent = "A atualizar…";
+  try {
+    const result = await api("/api/orders/list", { authToken: auth.token, date: businessDateToday(), activeOnly: false });
+    fulfillmentOrders = (result.orders || []).filter((order) => ["takeaway", "delivery"].includes(order.channel) && !order.table);
+    elements.fulfillmentOrdersMessage.textContent = "";
+    renderFulfillmentOrders();
+  } catch (error) {
+    elements.fulfillmentOrdersMessage.textContent = error.message;
+    if (error.status === 401) { auth = null; saveAuth(); closeFulfillmentOrders(); showLogin(error.message); }
+  } finally { elements.refreshFulfillmentOrdersButton.disabled = false; }
+}
+
+function renderFulfillmentOrders() {
+  const query = elements.fulfillmentSearch.value.trim().toLocaleLowerCase("pt-PT");
+  const channel = elements.fulfillmentChannelFilter.value;
+  const status = elements.fulfillmentStatusFilter.value;
+  const visible = fulfillmentOrders.filter((order) => {
+    const concluded = order.status === "delivered";
+    const statusMatches = status === "all" || (status === "delivered" ? concluded : !concluded && order.status !== "cancelled");
+    const haystack = [order.number, order.customerName, order.deliveryPhone, order.deliveryAddress].join(" ").toLocaleLowerCase("pt-PT");
+    return (channel === "all" || order.channel === channel) && statusMatches && (!query || haystack.includes(query));
+  });
+  const pendingCount = fulfillmentOrders.filter((order) => !["delivered", "cancelled"].includes(order.status)).length;
+  const concludedCount = fulfillmentOrders.filter((order) => order.status === "delivered").length;
+  elements.fulfillmentSummary.textContent = `${pendingCount} pendente(s) · ${concludedCount} concluído(s) · ${visible.length} apresentado(s)`;
+  elements.fulfillmentOrdersList.innerHTML = visible.length ? visible.map(fulfillmentOrderHtml).join("") : '<div class="fulfillment-empty"><strong>Nenhum pedido encontrado</strong><span>Altere os filtros ou atualize a lista.</span></div>';
+}
+
+function fulfillmentOrderHtml(order) {
+  const channelLabel = order.channel === "delivery" ? "Entrega" : "Retirada";
+  const statusLabel = { new:"Novo", preparing:"Em preparação", ready:"Pronto", delivered:"Concluído", cancelled:"Cancelado" }[order.status] || "Pendente";
+  const details = order.channel === "delivery" ? [order.deliveryAddress, order.deliveryPhone].filter(Boolean).join(" · ") : (order.customerName || "Retirada no local");
+  const items = (order.items || []).filter((item) => item.itemStatus !== "cancelled").map((item) => `${item.quantity}× ${escapeHtml(item.name)}`).join(" · ");
+  return `<article class="fulfillment-order channel-${order.channel} status-${order.status}" data-order-id="${order.id}"><div class="fulfillment-order-head"><div><strong>#${order.number}</strong><span>${channelLabel}</span><b>${statusLabel}</b></div><time>${formatOrderTime(order.createdAt)}</time></div><p>${escapeHtml(details)}</p><small>${items}</small><div class="fulfillment-order-total"><strong>${money(order.total)}</strong><span>${paymentMethodLabel(order.paymentMethod) || "Pagamento pendente"}</span></div><div class="fulfillment-order-actions"><button data-fulfillment-action="print" type="button">Imprimir conta</button>${!["delivered", "cancelled"].includes(order.status) ? '<button class="complete-fulfillment" data-fulfillment-action="complete" type="button">Dar baixa</button>' : ""}</div></article>`;
+}
+
+async function handleFulfillmentOrderAction(event) {
+  const button = event.target.closest("button[data-fulfillment-action]");
+  if (!button) return;
+  const order = fulfillmentOrders.find((entry) => entry.id === button.closest("[data-order-id]")?.dataset.orderId);
+  if (!order) return;
+  if (button.dataset.fulfillmentAction === "print") return printFulfillmentOrder(order);
+  if (!confirm(`Dar baixa no pedido #${order.number} como concluído?`)) return;
+  button.disabled = true;
+  elements.fulfillmentOrdersMessage.textContent = `A concluir o pedido #${order.number}…`;
+  try {
+    const result = await api("/api/orders/status", { authToken: auth.token, orderId: order.id, status: "delivered" });
+    fulfillmentOrders = fulfillmentOrders.map((entry) => entry.id === order.id ? result.order : entry);
+    renderFulfillmentOrders();
+    elements.fulfillmentOrdersMessage.textContent = `Pedido #${order.number} concluído.`;
+    showToast(`Pedido #${order.number} concluído`);
+  } catch (error) { elements.fulfillmentOrdersMessage.textContent = error.message; }
+}
+
+function printFulfillmentOrder(order) {
+  const printWindow = window.open("", "_blank", "width=420,height=760");
+  if (!printWindow) return showToast("Permite pop-ups para imprimir a conta.");
+  writeCustomerReceipt(printWindow, {
+    reference: `P${order.number}`, orderNumbers: [order.number], date: order.createdAt,
+    service: order.channel === "delivery" ? "Entrega" : "Retirada", customerName: order.customerName,
+    items: (order.items || []).filter((item) => item.itemStatus !== "cancelled"), total: order.total,
+    paymentLabel: paymentMethodLabel(order.paymentMethod), cashReceived: order.cashReceived, changeDue: order.changeDue,
+    deliveryAddress: order.deliveryAddress, deliveryPhone: order.deliveryPhone,
+    operator: auth?.user?.name || auth?.user?.username || "Caixa", storeConfig,
+  }, true);
+}
+
+function businessDateToday() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone:"Europe/Lisbon", year:"numeric", month:"2-digit", day:"2-digit" }).format(new Date());
 }
 
 async function closeSelectedTableAccount() {

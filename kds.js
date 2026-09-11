@@ -122,7 +122,7 @@ async function loadOrders(showFeedback = false) {
 }
 
 function renderBoard() {
-  const visibleOrders = orders.filter((order) => activeCenter === "all" || visibleOrderItems(order).length > 0).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const visibleOrders = orders.filter((order) => visibleOrderItems(order).length > 0).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   elements.allOrders.innerHTML = ticketList(visibleOrders, "Sem pedidos ativos.");
   elements.activeCount.textContent = visibleOrders.length;
   const average = visibleOrders.length ? Math.round(visibleOrders.reduce((total, order) => total + elapsedMinutes(order.createdAt), 0) / visibleOrders.length) : 0;
@@ -238,7 +238,7 @@ async function updateSingleItem(itemId, action) {
   setDialogBusy(true);
   try {
     const result = await api("/api/orders/items", { authToken: auth.token, orderId: order.id, itemIds, action });
-    if (["cancelled", "delivered"].includes(result.order.status)) {
+    if (["ready", "cancelled", "delivered"].includes(result.order.status)) {
       orders = orders.filter((entry) => entry.id !== order.id); closeOrderDialog();
     } else {
       orders = orders.map((entry) => entry.id === order.id ? result.order : entry); renderBoard(); renderOrderDialog();

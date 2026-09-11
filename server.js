@@ -581,7 +581,7 @@ async function handleOrderItems(request, response) {
   const now = new Date().toISOString();
   const activeItems = order.items.filter((item) => item.itemStatus !== "cancelled");
   if (!activeItems.length) order.status = "cancelled";
-  else if (activeItems.every((item) => item.itemStatus === "ready")) order.status = "delivered";
+  else if (activeItems.every((item) => item.itemStatus === "ready")) order.status = "ready";
   else if (order.status === "new") order.status = "preparing";
   order.updatedAt = now;
   order.statusHistory.push({
