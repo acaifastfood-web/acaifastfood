@@ -296,6 +296,15 @@ body:not(.kds-body) .auth-screen, body:not(.kds-body) .acai-custom-dialog { colo
 .ticket:hover { border-color: #fff; box-shadow: 0 0 0 1px #fff, 0 5px 14px rgba(0,0,0,.65); }
 .ticket-head { min-height: 34px; display: flex; align-items: center; justify-content: space-between; padding: 4px 5px 4px 8px; background: #c60d16; color: #fff; }
 .ticket.is-warning .ticket-head, .ticket.is-late .ticket-head { background: #c60d16; color: #fff; }
+.ticket.channel-table { border-color: #61bd45; box-shadow: 0 0 0 1px #245c20, 0 3px 8px rgba(0,0,0,.65); }
+.ticket.channel-table .ticket-head { background: linear-gradient(#49a938,#2f8228); color: #fff; }
+.ticket.channel-table .ticket-title em { color: #efffdc; }
+.ticket.channel-takeaway { border-color: #f1d33c; box-shadow: 0 0 0 1px #776a13, 0 3px 8px rgba(0,0,0,.65); }
+.ticket.channel-takeaway .ticket-head { background: linear-gradient(#f3d735,#c9a90e); color: #17150b; }
+.ticket.channel-takeaway .ticket-title em { color: #3e3505; }
+.ticket.channel-delivery { border-color: #f04a51; box-shadow: 0 0 0 1px #74191d, 0 3px 8px rgba(0,0,0,.65); }
+.ticket.channel-delivery .ticket-head { background: linear-gradient(#df3038,#b80f18); color: #fff; }
+.ticket.channel-delivery .ticket-title em { color: #fff0a3; }
 .ticket-title { display: flex; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums; }
 .ticket-title strong { font-size: 1rem; }
 .ticket-title span { font-size: .82rem; font-weight: 900; }

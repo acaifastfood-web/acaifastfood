@@ -147,6 +147,7 @@ function ticketList(entries, emptyText) {
 function ticketHtml(order) {
   const minutes = elapsedMinutes(order.createdAt);
   const timingClass = minutes >= 15 ? " is-late" : minutes >= 8 ? " is-warning" : " is-fresh";
+  const channelClass = order.table ? " channel-table" : order.channel === "delivery" ? " channel-delivery" : " channel-takeaway";
   const centers = productionCenters(order);
   const cardName = order.customerName || order.table || channelLabels[order.channel] || "Local";
   const centerCode = centers.map((center) => ({ "Açaí": "A", "Cozinha": "C", "Balcão": "B" }[center] || center.slice(0, 1))).join("+");
@@ -161,7 +162,7 @@ function ticketHtml(order) {
       : `${item.variant ? `<small>${escapeHtml(item.variant)}</small>` : ""}${item.modifiers?.length ? `<small>${item.modifiers.map(displayModifier).map(escapeHtml).join(" · ")}</small>` : ""}`;
     return `<li class="ticket-item item-${itemStatus}"><span class="ticket-qty">${item.quantity}</span><span><strong>${escapeHtml(item.name)}</strong>${itemDetails}${item.notes ? `<small class="item-observation"><strong>OBS.: ${escapeHtml(item.notes)}</strong></small>` : ""}${statusLabel ? `<small class="item-state-label">${statusLabel}</small>` : ""}</span></li>`;
   }).join("");
-  return `<article class="ticket${timingClass}" data-status="${order.status}" data-id="${order.id}">
+  return `<article class="ticket${timingClass}${channelClass}" data-status="${order.status}" data-channel="${order.table ? "table" : order.channel}" data-id="${order.id}">
     <header class="ticket-head"><div class="ticket-title"><strong>#${order.number}</strong><span>${elapsedLabel(order.createdAt)}</span><em>${escapeHtml(cardName)}</em></div><span class="ticket-center-badge">${escapeHtml(centerCode)}</span></header>
     <div class="ticket-command-row">
       <button class="ticket-command command-finish" data-action="open-items" data-id="${order.id}" type="button" title="Abrir itens do pedido" aria-label="Abrir itens do pedido"><span aria-hidden="true">✓</span></button>
