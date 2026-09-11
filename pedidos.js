@@ -78,7 +78,7 @@ elements.cartItems.addEventListener("click", handleCartAction);
 elements.sendOrderButton.addEventListener("click", sendOrder);
 elements.serviceTabs.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-service-mode]");
-  if (button) setServiceMode(button.dataset.serviceMode);
+  if (button) setServiceMode(button.dataset.serviceMode, button.dataset.orderChannel);
 });
 elements.tableGrid.addEventListener("click", (event) => {
   const button = event.target.closest("button[data-table-number]");
@@ -144,6 +144,8 @@ function applyStoreConfig() {
   }
   elements.mixedPaymentFields.querySelectorAll("[data-payment-part]").forEach((input) => { input.closest("label").hidden = !methods.includes(input.dataset.paymentPart); });
   document.querySelector('[data-service-mode="tables"]').hidden = storeConfig.servesTables === false;
+  document.querySelector('[data-order-channel="takeaway"]').hidden = storeConfig.pickupEnabled === false;
+  document.querySelector('[data-order-channel="delivery"]').hidden = storeConfig.deliveryEnabled === false;
   const pickupOption = elements.orderChannel.querySelector('option[value="takeaway"]'); const deliveryOption = elements.orderChannel.querySelector('option[value="delivery"]');
   if (pickupOption) pickupOption.disabled = storeConfig.pickupEnabled === false; if (deliveryOption) deliveryOption.disabled = storeConfig.deliveryEnabled === false;
   const primary = storeConfig.theme?.primaryColor; const secondary = storeConfig.theme?.secondaryColor;
@@ -206,14 +208,15 @@ async function loadManagedMenu() {
   }
 }
 
-function setServiceMode(mode) {
+function setServiceMode(mode, orderChannel = "") {
   serviceMode = ["tables", "counter"].includes(mode) ? mode : "";
+  if (serviceMode === "counter" && ["takeaway", "delivery"].includes(orderChannel)) elements.orderChannel.value = orderChannel;
   elements.serviceTabs.querySelectorAll("[data-service-mode]").forEach((button) => {
-    const active = button.dataset.serviceMode === serviceMode;
+    const active = button.dataset.serviceMode === serviceMode && (serviceMode !== "counter" || button.dataset.orderChannel === elements.orderChannel.value);
     button.classList.toggle("active", active); button.setAttribute("aria-selected", String(active));
   });
   elements.tablesPanel.hidden = serviceMode !== "tables";
-  elements.orderChannelField.hidden = serviceMode === "tables";
+  elements.orderChannelField.hidden = true;
   elements.paymentMethodField.hidden = serviceMode === "tables";
   elements.orderTableField.hidden = !serviceMode;
   elements.orderTable.readOnly = serviceMode === "tables";
@@ -223,9 +226,8 @@ function setServiceMode(mode) {
     elements.orderTable.placeholder = "Selecione uma mesa acima";
   } else if (serviceMode === "counter") {
     selectedTable = 0;
-    elements.orderChannel.value = "takeaway";
     elements.orderTable.value = "";
-    elements.orderTable.placeholder = "Nome ou referência";
+    elements.orderTable.placeholder = elements.orderChannel.value === "delivery" ? "Nome ou referência da entrega" : "Nome ou referência da retirada";
   } else {
     selectedTable = 0;
     elements.orderTable.value = "";
@@ -271,8 +273,9 @@ function updateServiceGate() {
       ? `Mesa ${selectedTable} · ${account.length} pedido(s) · consumo ${money(accountTotal)}. Pode acrescentar produtos.`
       : `Mesa ${selectedTable} selecionada. Pode iniciar o pedido.`;
   }
-  else if (serviceMode === "counter") elements.serviceRequiredMessage.textContent = "Retirada | Entrega selecionada. Escolha o tipo e inicie o pedido.";
-  else elements.serviceRequiredMessage.textContent = "Selecione uma mesa ou Retirada | Entrega antes de iniciar o pedido.";
+  else if (serviceMode === "counter" && elements.orderChannel.value === "delivery") elements.serviceRequiredMessage.textContent = "Entrega selecionada. Preencha os dados e inicie o pedido.";
+  else if (serviceMode === "counter") elements.serviceRequiredMessage.textContent = "Retirada selecionada. Pode iniciar o pedido.";
+  else elements.serviceRequiredMessage.textContent = "Selecione Mesa, Retirada ou Entrega antes de iniciar o pedido.";
 }
 
 function renderTables() {
@@ -786,7 +789,7 @@ async function sendOrder() {
   if (!cart.length || sending) return;
   if (!auth?.token) return showLogin("Entra novamente antes de enviar o pedido.");
   if (!serviceIsReady()) {
-    setStatus(elements.orderStatus, "Seleciona uma mesa ou Retirada | Entrega antes de enviar.", "error");
+    setStatus(elements.orderStatus, "Seleciona Mesa, Retirada ou Entrega antes de enviar.", "error");
     return;
   }
   let receiptWindow = null;

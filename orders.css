@@ -195,10 +195,12 @@ body:not(.kds-body) .product-card.sold-out .product-price { color:#ff8b8b; font-
 body:not(.kds-body) .service-area { order: 4; margin: auto 0 0; overflow: auto; border: 0; border-top: 4px solid #696d66; border-radius: 0; background: #393c37; box-shadow: none; }
 body:not(.kds-body) .service-required-message { border: 0; border-bottom: 1px solid #696d66; background: #565a54; color: #ffe086; padding: 7px 12px; font-size: .74rem; }
 body:not(.kds-body) .service-required-message.ready { background: #344d3b; color: #b9efc5; }
-body:not(.kds-body) .service-tabs { grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px; background: #282a27; }
+body:not(.kds-body) .service-tabs { grid-template-columns: repeat(3,1fr); gap: 8px; padding: 8px; background: #282a27; }
 body:not(.kds-body) .service-tab { min-height: 58px; border: 1px solid #777b74; border-radius: 5px; background: linear-gradient(#969a93,#7c807a); color: #fff; font-size: 1.1rem; text-shadow: 0 1px #555; }
 body:not(.kds-body) .service-tab span { border-radius: 3px; background: #5e625c; }
 body:not(.kds-body) .service-tab.active { background: linear-gradient(#45a9a5,#278580); box-shadow: inset 0 -4px rgba(0,0,0,.18); }
+body:not(.kds-body) .service-tab-takeaway.active { background: linear-gradient(#f1d64a,#c7a912); color: #211d06; text-shadow: none; }
+body:not(.kds-body) .service-tab-delivery.active { background: linear-gradient(#e3484f,#b6151d); color: #fff; }
 body:not(.kds-body) .tables-panel { max-height: 255px; overflow: auto; border: 0; border-bottom: 1px solid #696d66; padding: 10px; background: #242623; }
 body:not(.kds-body) .tables-panel-head div span { color: #b5b9b2; }
 body:not(.kds-body) .table-panel-actions { display: flex; align-items: center; gap: 6px; }

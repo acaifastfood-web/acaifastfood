@@ -6,7 +6,7 @@
     <title>Caixa e Pedidos | Açaí Fast Food</title>
     <meta name="theme-color" content="#5a174f" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="orders.css?v=20260804-repetir-complementos" />
+    <link rel="stylesheet" href="orders.css?v=20260912-canais-atendimento" />
   </head>
   <body>
     <header class="order-header">
@@ -31,14 +31,15 @@
         <div class="category-tabs" id="categoryTabs" aria-label="Categorias do menu"></div>
         <div class="product-grid" id="productGrid"></div>
         <section class="service-area">
-          <div class="service-required-message" id="serviceRequiredMessage">Selecione uma mesa ou Retirada | Entrega antes de iniciar o pedido.</div>
+          <div class="service-required-message" id="serviceRequiredMessage">Selecione Mesa, Retirada ou Entrega antes de iniciar o pedido.</div>
           <div class="tables-panel" id="tablesPanel" role="tabpanel" hidden>
             <div class="tables-panel-head"><div><strong>Selecionar mesa</strong><span>Verde: livre · Laranja: ocupada</span></div><div class="table-panel-actions"><button id="viewTableAccountButton" type="button" disabled>Consultar consumo</button><button id="transferTableButton" type="button" disabled>Transferir mesa</button><span id="tablesSummary">50 livres</span></div></div>
             <div class="table-grid" id="tableGrid"></div>
           </div>
           <div class="service-tabs" role="tablist" aria-label="Área de atendimento">
             <button class="service-tab" id="tablesTab" data-service-mode="tables" role="tab" aria-selected="false" type="button">Mesas <span>50</span></button>
-            <button class="service-tab" id="counterTab" data-service-mode="counter" role="tab" aria-selected="false" type="button">Retirada | Entrega</button>
+            <button class="service-tab service-tab-takeaway" id="takeawayTab" data-service-mode="counter" data-order-channel="takeaway" role="tab" aria-selected="false" type="button">Retirada</button>
+            <button class="service-tab service-tab-delivery" id="deliveryTab" data-service-mode="counter" data-order-channel="delivery" role="tab" aria-selected="false" type="button">Entrega</button>
           </div>
         </section>
       </section>
@@ -47,7 +48,7 @@
         <div class="cart-heading"><div><span>CAIXA</span><h2>Pedido atual</h2></div><span class="cart-count" id="cartCount">0</span></div>
         <div class="cart-items" id="cartItems"></div>
         <div class="order-details">
-          <label class="field" id="orderChannelField">Tipo de pedido
+          <label class="field" id="orderChannelField" hidden>Tipo de pedido
             <select id="orderChannel"><option value="takeaway">Retirada</option><option value="delivery">Entrega</option></select>
           </label>
           <label class="field" id="orderTableField">Mesa / referência<input id="orderTable" maxlength="30" placeholder="Ex.: Mesa 4" /></label>
@@ -187,6 +188,6 @@
     </section>
     <div class="toast" id="toast" hidden></div>
     <script src="menu-data.js?v=20260804-repetir-complementos"></script>
-    <script src="pedidos.js?v=20260804-repetir-complementos"></script>
+    <script src="pedidos.js?v=20260912-canais-atendimento"></script>
   </body>
 </html>
