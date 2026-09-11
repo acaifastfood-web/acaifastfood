@@ -359,9 +359,24 @@ async function closeSelectedTableAccount() {
   if (cashPart && cashReceived < cashPart) { elements.tableAccountMessage.textContent = "O valor recebido é inferior à parcela em DINHEIRO."; elements.tableCashReceived.focus(); return; }
   const methodLabel = mixed ? paymentParts.map((part) => paymentMethodLabel(part.method)).join(" + ") : paymentMethodLabel(paymentMethod);
   if (!confirm(`Confirmar pagamento de ${selectedEntries.length} item(ns), no valor de ${money(total)}, por ${methodLabel}?`)) return;
+  const receiptWindow = window.open("", "_blank", "width=420,height=760");
+  if (receiptWindow) writeReceiptLoading(receiptWindow);
   elements.closeTableAccountFinalButton.disabled = true;
   try {
     const result = await api("/api/tables/pay-items", { authToken: auth.token, tableNumber: selectedTable, paymentMethod: mixed ? "" : paymentMethod, cashReceived, paymentParts: mixed ? paymentParts.map((part) => ({ ...part, cashReceived: part.method === "cash" ? cashReceived : 0 })) : undefined, items: selectedEntries.map((entry) => ({ orderId: entry.order.id, itemId: entry.item.id })) });
+    if (receiptWindow) writeCustomerReceipt(receiptWindow, {
+      reference: `M${selectedTable}-${String(result.payments?.[0]?.id || "PAGAMENTO").slice(0, 8).toUpperCase()}`,
+      orderNumbers: [...new Set(selectedEntries.map((entry) => entry.order.number))],
+      date: result.payments?.[0]?.paidAt || new Date().toISOString(),
+      service: `Mesa ${selectedTable}`,
+      customerName: selectedEntries.find((entry) => entry.order.customerName)?.order.customerName || "",
+      items: selectedEntries.map((entry) => ({ ...entry.item, quantity: unpaidItemQuantity(entry.item) })),
+      total,
+      paymentLabel: result.payment.methodLabel,
+      cashReceived,
+      changeDue: result.payment.changeDue,
+      operator: auth?.name || auth?.username || "Caixa",
+    }, true);
     tableOrders = tableOrders.filter((order) => tableNumberFromOrder(order) !== selectedTable);
     if (!result.tableClosed) tableOrders.push(...result.orders);
     occupiedTables = new Set(tableOrders.map(tableNumberFromOrder)); selectedPaymentItems.clear();
@@ -370,7 +385,7 @@ async function closeSelectedTableAccount() {
     if (result.tableClosed) closeTableAccountDialog(); else renderTableAccount();
     renderTables(); updateServiceGate();
     showToast(result.payment.changeDue > 0 ? `${result.payment.methodLabel} · Troco ${money(result.payment.changeDue)}` : `Pagamento concluído por ${result.payment.methodLabel}`);
-  } catch (error) { elements.tableAccountMessage.textContent = error.message; }
+  } catch (error) { if (receiptWindow) receiptWindow.close(); elements.tableAccountMessage.textContent = error.message; }
   finally { updateTablePayment(); }
 }
 
@@ -744,6 +759,7 @@ async function sendOrder() {
     setStatus(elements.orderStatus, "Seleciona uma mesa ou Retirada | Entrega antes de enviar.", "error");
     return;
   }
+  let receiptWindow = null;
   sending = true; renderCart(); setStatus(elements.orderStatus, "A enviar para a cozinha…");
   try {
     const total = cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
@@ -764,11 +780,28 @@ async function sendOrder() {
       cashReceived = Number(receivedText.replace(",", "."));
       if (!Number.isFinite(cashReceived) || cashReceived < total) { setStatus(elements.orderStatus, "O valor recebido é inferior ao total do pedido.", "error"); return; }
     }
+    if (serviceMode !== "tables") {
+      receiptWindow = window.open("", "_blank", "width=420,height=760");
+      if (receiptWindow) writeReceiptLoading(receiptWindow);
+    }
     const result = await api("/api/orders/create", {
       authToken: auth.token, items: cart, channel: elements.orderChannel.value, table: elements.orderTable.value,
       customerName: elements.customerName.value, paymentMethod, cashReceived, deliveryAddress, deliveryPhone, changeRequired, notes: elements.orderNotes.value,
     });
     const number = result.order.number;
+    if (receiptWindow) writeCustomerReceipt(receiptWindow, {
+      reference: `P${number}`,
+      orderNumbers: [number],
+      date: result.order.createdAt,
+      service: result.order.channel === "delivery" ? "Entrega" : "Retirada",
+      customerName: result.order.customerName,
+      items: result.order.items,
+      total: result.order.total,
+      paymentLabel: paymentMethodLabel(result.order.paymentMethod),
+      cashReceived: result.order.cashReceived,
+      changeDue: result.order.changeDue,
+      operator: result.order.createdBy || auth?.name || auth?.username || "Caixa",
+    }, true);
     cart = []; elements.customerName.value = ""; elements.orderNotes.value = ""; elements.paymentMethod.value = "cash";
     elements.deliveryAddress.value = ""; elements.deliveryPhone.value = ""; elements.deliveryNeedsChange.value = "no"; elements.deliveryCashAmount.value = "";
     elements.orderTable.value = "";
@@ -776,6 +809,7 @@ async function sendOrder() {
     showToast(result.order.paymentMethod === "cash" ? `Pedido #${number} · Troco ${money(result.order.changeDue)}` : `Pedido #${number} entrou na cozinha`);
     loadTableStatus(); renderTables();
   } catch (error) {
+    if (receiptWindow) receiptWindow.close();
     if (error.status === 401) { auth = null; saveAuth(); showLogin(error.message); }
     setStatus(elements.orderStatus, error.message, "error");
   } finally { sending = false; renderCart(); }
@@ -793,6 +827,23 @@ function saveAuth() { if (auth) localStorage.setItem(AUTH_KEY, JSON.stringify(au
 function setStatus(node, message, tone = "") { node.textContent = message || ""; node.className = `form-status${tone ? ` ${tone}` : ""}`; }
 function showToast(message) { elements.toast.textContent = message; elements.toast.hidden = false; setTimeout(() => { elements.toast.hidden = true; }, 3200); }
 function money(value) { return new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" }).format(Number(value || 0)); }
+function writeReceiptLoading(printWindow) {
+  printWindow.document.open();
+  printWindow.document.write('<!doctype html><html><head><meta charset="utf-8"><title>A preparar cupão</title></head><body style="font:16px system-ui;padding:24px">A preparar o cupão do cliente…</body></html>');
+  printWindow.document.close();
+}
+function writeCustomerReceipt(printWindow, receipt, shouldPrint) {
+  const itemRows = (receipt.items || []).map((item) => {
+    const details = [item.variant, ...(item.modifiers || []), item.notes ? `OBS.: ${item.notes}` : ""].filter(Boolean);
+    return `<tr><td><strong>${escapeHtml(item.name)}</strong>${details.map((detail) => `<small>${escapeHtml(detail)}</small>`).join("")}</td><td>${Number(item.quantity || 1)}×</td><td>${money(Number(item.quantity || 1) * Number(item.unitPrice || 0))}</td></tr>`;
+  }).join("");
+  const receivedLine = Number(receipt.cashReceived || 0) > 0 ? `<div class="line"><span>Recebido</span><span>${money(receipt.cashReceived)}</span></div><div class="line"><span>Troco</span><span>${money(receipt.changeDue)}</span></div>` : "";
+  const orderText = (receipt.orderNumbers || []).length ? `Pedido(s): ${(receipt.orderNumbers || []).map((number) => `#${number}`).join(", ")}` : "";
+  printWindow.document.open();
+  printWindow.document.write(`<!doctype html><html lang="pt-PT"><head><meta charset="utf-8"><title>Cupão ${escapeHtml(receipt.reference)}</title><style>@page{size:80mm auto;margin:4mm}*{box-sizing:border-box}body{font:12px ui-monospace,monospace;color:#000;margin:0}h1{text-align:center;font-size:18px;margin:0}.store{text-align:center;margin:4px 0}.doc{text-align:center;border-block:1px dashed #000;margin:9px 0;padding:7px 0}.doc strong{display:block;font-size:14px}.warning{font-weight:950;margin-top:4px}.meta{display:flex;justify-content:space-between;gap:8px;margin-bottom:7px}table{width:100%;border-collapse:collapse}th,td{padding:5px 0;border-bottom:1px dotted #aaa;vertical-align:top}th{text-align:left;border-bottom:1px solid #000}th:nth-child(2),th:nth-child(3),td:nth-child(2),td:nth-child(3){padding-left:8px;text-align:right}th:nth-child(2),td:nth-child(2){width:38px}th:nth-child(3),td:nth-child(3){width:67px}small{display:block;margin-top:2px}.line{display:flex;justify-content:space-between;padding:2px 0}.total{border-top:2px solid #000;margin-top:6px;padding-top:6px;font-size:17px;font-weight:950}.payment{text-align:center;border-block:1px dashed #000;margin-top:9px;padding:7px 0}.fake-qr{width:74px;height:74px;margin:12px auto 5px;border:7px double #000;background:repeating-linear-gradient(45deg,#000 0 5px,#fff 5px 10px)}.qr-label,.footer{text-align:center}.footer{margin-top:10px;line-height:1.5}</style></head><body><h1>AÇAÍ FAST FOOD</h1><div class="store">Cupão do cliente</div><div class="doc"><strong>DOCUMENTO DE TESTE</strong>${escapeHtml(receipt.reference)}<div class="warning">SEM VALIDADE FISCAL</div></div><div class="meta"><span>${new Intl.DateTimeFormat("pt-PT", { dateStyle: "short", timeStyle: "short" }).format(new Date(receipt.date || Date.now()))}</span><span>${escapeHtml(receipt.service || "")}</span></div>${receipt.customerName ? `<div>Cliente: ${escapeHtml(receipt.customerName)}</div>` : ""}<div>${escapeHtml(orderText)}</div><table><thead><tr><th>Descrição</th><th>Qtd.</th><th>Total</th></tr></thead><tbody>${itemRows}</tbody></table><div class="line total"><span>TOTAL</span><span>${money(receipt.total)}</span></div><div class="payment"><strong>Pagamento: ${escapeHtml(receipt.paymentLabel || "")}</strong>${receivedLine}</div><div class="fake-qr"></div><div class="qr-label">QR ILUSTRATIVO · SEM VALIDADE</div><div class="footer">Obrigado pela sua preferência!<br>Operador: ${escapeHtml(receipt.operator || "Caixa")}</div></body></html>`);
+  printWindow.document.close();
+  if (shouldPrint) setTimeout(() => { printWindow.focus(); printWindow.print(); }, 180);
+}
 function normalize(value) { return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
 function productionCenterForCategory(category) {
   if (category === "Bebidas") return "Balcão";
