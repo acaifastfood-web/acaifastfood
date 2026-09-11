@@ -479,6 +479,8 @@ async function handleCreateOrder(request, response) {
   const cashReceived = paymentMethod === "cash" ? moneyValue(body.cashReceived) : 0;
   if (!tableNumber && !paymentMethod) return sendJson(response, 400, { error: "Escolhe a forma de pagamento." });
   if (paymentMethod === "cash" && cashReceived < orderTotal) return sendJson(response, 400, { error: "O valor recebido em dinheiro e inferior ao total do pedido." });
+  const stockConsumption = consumeOrderStock(items);
+  if (stockConsumption.error) return sendJson(response, 409, { error: stockConsumption.error });
 
   const orders = readOrderRecords();
   const now = new Date().toISOString();
@@ -769,7 +771,7 @@ async function handleMenuList(request, response) {
   const body = await readJson(request);
   const session = getSession(body.authToken);
   if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
-  return sendJson(response, 200, { items: readMenuItems() });
+  return sendJson(response, 200, { items: menuItemsWithAvailability(readMenuItems()) });
 }
 
 async function handleInitializeMenu(request, response) {
@@ -844,11 +846,48 @@ function normalizeMenuItem(rawItem) {
     price: Math.max(0, moneyValue(rawItem.price)),
     icon: String(rawItem.icon || "•").trim().slice(0, 8) || "•",
     productionCenter: ["Balcão", "Cozinha", "Açaí"].includes(rawItem.productionCenter) ? rawItem.productionCenter : "Cozinha",
+    recipe: (Array.isArray(rawItem.recipe) ? rawItem.recipe : []).slice(0, 40).map((entry) => ({ stockItemId: String(entry.stockItemId || "").slice(0, 100), name: String(entry.name || "").trim().slice(0, 120), quantity: Math.max(0, numberValue(entry.quantity)) })).filter((entry) => entry.name && entry.quantity > 0),
     active: rawItem.active !== false,
     createdAt: rawItem.createdAt || now,
     updatedAt: rawItem.updatedAt || now,
   };
 }
+
+function menuItemsWithAvailability(items) {
+  const stock = readStockState().items;
+  return items.map((item) => {
+    const missing = (item.recipe || []).find((ingredient) => {
+      const stockItem = stock.find((entry) => ingredient.stockItemId ? entry.id === ingredient.stockItemId : normalizeSearchText(entry.name) === normalizeSearchText(ingredient.name));
+      return !stockItem || stockItem.quantity < ingredient.quantity;
+    });
+    return { ...item, stockAvailable: !missing, stockReason: missing ? `Sem stock suficiente: ${missing.name}` : "" };
+  });
+}
+
+function consumeOrderStock(items) {
+  const menuItems = readMenuItems();
+  const state = readStockState();
+  const deductions = new Map();
+  for (const orderItem of items) {
+    const product = menuItems.find((entry) => entry.id === orderItem.productId);
+    for (const ingredient of product?.recipe || []) {
+      const stockItem = state.items.find((entry) => ingredient.stockItemId ? entry.id === ingredient.stockItemId : normalizeSearchText(entry.name) === normalizeSearchText(ingredient.name));
+      if (!stockItem) return { error: `Ingrediente não encontrado no stock: ${ingredient.name}` };
+      deductions.set(stockItem.id, (deductions.get(stockItem.id) || 0) + ingredient.quantity * orderItem.quantity);
+    }
+  }
+  for (const stockItem of state.items) {
+    const required = deductions.get(stockItem.id) || 0;
+    if (required > stockItem.quantity) return { error: `Stock insuficiente de ${stockItem.name}. Disponível: ${stockItem.quantity}; necessário: ${required}.` };
+  }
+  if (deductions.size) {
+    state.items.forEach((stockItem) => { stockItem.quantity = Math.max(0, stockItem.quantity - (deductions.get(stockItem.id) || 0)); });
+    writeStockState(state.items, { source: "sales", updatedBy: "Caixa" });
+  }
+  return { ok: true, deductions: deductions.size };
+}
+
+function normalizeSearchText(value) { return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase(); }
 
 function readMenuItems() {
   try {

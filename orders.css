@@ -190,6 +190,8 @@ body:not(.kds-body) .product-card .product-icon { width: calc(100% + 14px); heig
 body:not(.kds-body) .product-card strong { font-size: .74rem; line-height: 1.05; text-transform: uppercase; }
 body:not(.kds-body) .product-card small { display: none; }
 body:not(.kds-body) .product-card .product-price { color: #fff; font-size: .78rem; }
+body:not(.kds-body) .product-card.sold-out { opacity:.48; cursor:not-allowed; filter:grayscale(1); }
+body:not(.kds-body) .product-card.sold-out .product-price { color:#ff8b8b; font-size:.65rem; }
 body:not(.kds-body) .service-area { order: 4; margin: auto 0 0; overflow: auto; border: 0; border-top: 4px solid #696d66; border-radius: 0; background: #393c37; box-shadow: none; }
 body:not(.kds-body) .service-required-message { border: 0; border-bottom: 1px solid #696d66; background: #565a54; color: #ffe086; padding: 7px 12px; font-size: .74rem; }
 body:not(.kds-body) .service-required-message.ready { background: #344d3b; color: #b9efc5; }

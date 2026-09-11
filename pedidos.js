@@ -452,10 +452,10 @@ function renderProducts() {
   const query = normalize(elements.productSearch.value);
   const products = menu.filter((item) => (activeCategory === "Todos" || item.category === activeCategory) && (!query || normalize(`${item.name} ${item.variant}`).includes(query)));
   elements.productGrid.innerHTML = products.length ? products.map((item) => `
-    <button class="product-card" data-product-id="${item.id}" type="button">
+    <button class="product-card${item.stockAvailable === false ? " sold-out" : ""}" data-product-id="${item.id}" type="button" ${item.stockAvailable === false ? `disabled title="${escapeHtml(item.stockReason || "Produto sem stock")}"` : ""}>
       <span class="product-icon">${item.icon}</span>
       <span><strong>${item.name}</strong><small>${item.variant}</small></span>
-      <span class="product-price">${money(item.price)}</span>
+      <span class="product-price">${item.stockAvailable === false ? "INDISPONÍVEL" : money(item.price)}</span>
     </button>`).join("") : '<div class="empty-products">Nenhum produto encontrado.</div>';
 }
 
@@ -466,6 +466,7 @@ function addProduct(productId) {
   }
   const product = menu.find((item) => item.id === productId);
   if (!product) return;
+  if (product.stockAvailable === false) return showToast(product.stockReason || "Produto sem stock suficiente.");
   if ((customizableCategories.has(product.category) || product.name === "Sumo natural") && !(product.category === "Combos" && !product.name.startsWith("Combo "))) {
     openProductCustomization(product);
     return;

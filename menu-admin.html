@@ -75,6 +75,7 @@
           <label><span>Centro de produção *</span><select id="productCenter" name="productionCenter" required><option>Balcão</option><option>Cozinha</option><option>Açaí</option></select></label>
           <label><span>Ícone</span><input id="productIcon" name="icon" maxlength="8" placeholder="🥣" /></label>
           <label class="wide"><span>Descrição / variação</span><textarea id="productVariant" name="variant" maxlength="240" rows="3" placeholder="Tamanho, ingredientes incluídos ou informação útil para o Caixa"></textarea></label>
+          <label class="wide"><span>Ficha técnica</span><textarea id="productRecipe" name="recipe" rows="4" placeholder="Um ingrediente por linha: Nome no stock | quantidade&#10;Ex.: Carne de hambúrguer | 1&#10;Pão brioche | 1"></textarea><small>O nome deve corresponder ao produto do stock. A quantidade será descontada automaticamente por unidade vendida.</small></label>
           <label class="toggle-row wide"><input id="productActive" name="active" type="checkbox" checked /><span><strong>Produto à venda</strong><small>Quando desligado, fica guardado mas não aparece no Caixa.</small></span></label>
         </div>
         <p class="form-message" id="formMessage" aria-live="polite"></p>

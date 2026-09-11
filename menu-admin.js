@@ -122,6 +122,7 @@ function openProductDialog(item = null) {
   el.productName.value = item?.name || ""; el.productPrice.value = item?.price ?? ""; el.productCode.value = item?.code || "";
   el.productCategory.value = item?.category || ""; el.productCenter.value = item?.productionCenter || "Cozinha"; el.productIcon.value = item?.icon || "";
   el.productVariant.value = item?.variant || ""; el.productActive.checked = item?.active !== false; setMessage(el.formMessage, "");
+  el.productRecipe.value = (item?.recipe || []).map((entry) => `${entry.name} | ${entry.quantity}`).join("\n");
   el.productDialog.showModal(); setTimeout(() => el.productName.focus(), 50);
 }
 
@@ -131,7 +132,8 @@ async function saveProduct(event) {
   event.preventDefault(); setMessage(el.formMessage, "A guardar…", true); el.saveProductButton.disabled = true;
   const wasEditing = Boolean(editingId);
   const existing = items.find((item) => item.id === editingId);
-  const item = { ...existing, id: editingId || undefined, name: el.productName.value, price: el.productPrice.value, code: el.productCode.value, category: el.productCategory.value, productionCenter: el.productCenter.value, icon: el.productIcon.value || "•", variant: el.productVariant.value, active: el.productActive.checked };
+  const recipe = el.productRecipe.value.split(/\n/).map((line) => { const [name, quantity] = line.split("|"); return { name: String(name || "").trim(), quantity: Number(String(quantity || "1").trim().replace(",", ".")) }; }).filter((entry) => entry.name && entry.quantity > 0);
+  const item = { ...existing, id: editingId || undefined, name: el.productName.value, price: el.productPrice.value, code: el.productCode.value, category: el.productCategory.value, productionCenter: el.productCenter.value, icon: el.productIcon.value || "•", variant: el.productVariant.value, recipe, active: el.productActive.checked };
   try {
     const result = await api("/api/menu/save", { authToken: auth.token, item }); items = result.items; closeProductDialog(); renderAll(); toast(wasEditing ? "Produto atualizado" : "Produto acrescentado ao menu");
   } catch (error) { setMessage(el.formMessage, error.message); }
