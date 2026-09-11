@@ -553,6 +553,8 @@ async function handleOrderItems(request, response) {
   if (!order) return sendJson(response, 404, { error: "Pedido nao encontrado." });
   if (["delivered", "cancelled"].includes(order.status)) return sendJson(response, 409, { error: "Este pedido ja foi encerrado." });
 
+  const selectedItems = order.items.filter((item) => itemIds.includes(item.id));
+  if (action === "cancelled") returnOrderStock(selectedItems, session.name);
   let changed = 0;
   order.items.forEach((item) => {
     if (itemIds.includes(item.id)) {
@@ -587,6 +589,7 @@ async function handleCancelOrder(request, response) {
   const order = orders.find((entry) => entry.id === String(body.orderId || ""));
   if (!order) return sendJson(response, 404, { error: "Pedido nao encontrado." });
   if (order.status === "delivered") return sendJson(response, 409, { error: "Um pedido entregue nao pode ser cancelado." });
+  returnOrderStock(order.items, session.name);
 
   const now = new Date().toISOString();
   order.status = "cancelled";
@@ -608,6 +611,8 @@ async function handleRestoreOrder(request, response) {
   const order = orders.find((entry) => entry.id === String(body.orderId || ""));
   if (!order) return sendJson(response, 404, { error: "Pedido nao encontrado." });
   if (order.status !== "cancelled") return sendJson(response, 409, { error: "Este pedido nao esta apagado." });
+  const stockConsumption = consumeOrderStock(order.items, { restoring: true, updatedBy: session.name });
+  if (stockConsumption.error) return sendJson(response, 409, { error: `Não foi possível restaurar: ${stockConsumption.error}` });
 
   const now = new Date().toISOString();
   order.items.forEach((item) => { item.itemStatus = "pending"; });
@@ -864,17 +869,22 @@ function menuItemsWithAvailability(items) {
   });
 }
 
-function consumeOrderStock(items) {
+function consumeOrderStock(items, options = {}) {
   const menuItems = readMenuItems();
   const state = readStockState();
   const deductions = new Map();
   for (const orderItem of items) {
     const product = menuItems.find((entry) => entry.id === orderItem.productId);
-    for (const ingredient of product?.recipe || []) {
+    const recipe = orderItem.stockRecipe?.length ? orderItem.stockRecipe : (product?.recipe || []);
+    if (orderItem.stockRecipe?.length && orderItem.stockReturned !== true && options.restoring) continue;
+    const snapshot = [];
+    for (const ingredient of recipe) {
       const stockItem = state.items.find((entry) => ingredient.stockItemId ? entry.id === ingredient.stockItemId : normalizeSearchText(entry.name) === normalizeSearchText(ingredient.name));
       if (!stockItem) return { error: `Ingrediente não encontrado no stock: ${ingredient.name}` };
       deductions.set(stockItem.id, (deductions.get(stockItem.id) || 0) + ingredient.quantity * orderItem.quantity);
+      snapshot.push({ stockItemId: stockItem.id, name: stockItem.name, quantity: ingredient.quantity });
     }
+    if (snapshot.length) orderItem.stockRecipe = snapshot;
   }
   for (const stockItem of state.items) {
     const required = deductions.get(stockItem.id) || 0;
@@ -882,9 +892,28 @@ function consumeOrderStock(items) {
   }
   if (deductions.size) {
     state.items.forEach((stockItem) => { stockItem.quantity = Math.max(0, stockItem.quantity - (deductions.get(stockItem.id) || 0)); });
-    writeStockState(state.items, { source: "sales", updatedBy: "Caixa" });
+    items.forEach((item) => { if (item.stockRecipe?.length) item.stockReturned = false; });
+    writeStockState(state.items, { source: "sales", updatedBy: options.updatedBy || "Caixa" });
   }
   return { ok: true, deductions: deductions.size };
+}
+
+function returnOrderStock(items, updatedBy = "Caixa") {
+  const refundable = (items || []).filter((item) => item.stockRecipe?.length && item.stockReturned !== true);
+  if (!refundable.length) return { ok: true, returned: 0 };
+  const state = readStockState();
+  let returned = 0;
+  for (const item of refundable) {
+    for (const ingredient of item.stockRecipe) {
+      const stockItem = state.items.find((entry) => entry.id === ingredient.stockItemId || normalizeSearchText(entry.name) === normalizeSearchText(ingredient.name));
+      if (!stockItem) continue;
+      stockItem.quantity += ingredient.quantity * item.quantity;
+      returned += 1;
+    }
+    item.stockReturned = true;
+  }
+  if (returned) writeStockState(state.items, { source: "order-cancellation", updatedBy });
+  return { ok: true, returned };
 }
 
 function normalizeSearchText(value) { return String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase(); }
@@ -3501,6 +3530,8 @@ function normalizeOrderItems(items) {
       notes: String(item.notes || "").trim().slice(0, 240),
       quantity: Math.min(99, Math.max(1, Math.round(Number(item.quantity || 1)))),
       unitPrice: roundMoney(Math.max(0, Number(item.unitPrice || 0))),
+      stockRecipe: (Array.isArray(item.stockRecipe) ? item.stockRecipe : []).slice(0, 40).map((entry) => ({ stockItemId: String(entry.stockItemId || "").slice(0, 100), name: String(entry.name || "").trim().slice(0, 120), quantity: Math.max(0, numberValue(entry.quantity)) })).filter((entry) => entry.name && entry.quantity > 0),
+      stockReturned: item.stockReturned === true,
     }))
     .filter((item) => item.name && Number.isFinite(item.unitPrice));
 }

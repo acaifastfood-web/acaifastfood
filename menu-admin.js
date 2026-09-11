@@ -4,6 +4,7 @@ const AUTH_KEY = "acai-fast-food-auth-v1";
 let auth = loadAuth();
 let items = [];
 let editingId = "";
+let stockItems = [];
 
 const el = Object.fromEntries([...document.querySelectorAll("[id]")].map((node) => [node.id, node]));
 
@@ -22,6 +23,7 @@ el.categoryFilter.addEventListener("change", renderProducts);
 el.centerFilter.addEventListener("change", renderProducts);
 el.statusFilter.addEventListener("change", renderProducts);
 el.exportButton.addEventListener("click", exportCsv);
+el.addRecipeIngredient.addEventListener("click", addRecipeIngredient);
 document.querySelector(".section-tabs").addEventListener("click", switchView);
 el.categoryList.addEventListener("click", (event) => {
   const card = event.target.closest("[data-category]");
@@ -64,7 +66,19 @@ async function loadMenu() {
     result = await api("/api/menu/initialize", { authToken: auth.token, items: window.ACAI_MENU });
   }
   items = Array.isArray(result.items) ? result.items : [];
+  try { const stock = await fetch("/api/stock-state").then((response) => response.json()); stockItems = Array.isArray(stock.items) ? stock.items : []; } catch { stockItems = []; }
+  el.stockIngredientSelect.innerHTML = '<option value="">Selecionar ingrediente do stock</option>' + stockItems.sort((a,b) => localeSort(a.name,b.name)).map((item) => `<option value="${escapeHtml(item.name)}">${escapeHtml(item.name)} · ${Number(item.quantity || 0)} ${escapeHtml(item.unit || "")}</option>`).join("");
   el.authOverlay.hidden = true; renderAll();
+}
+
+function addRecipeIngredient() {
+  const name = el.stockIngredientSelect.value;
+  const quantity = Number(el.stockIngredientQuantity.value || 0);
+  if (!name || quantity <= 0) return toast("Selecione o ingrediente e a quantidade.");
+  const lines = el.productRecipe.value.split(/\n/).map((line) => line.trim()).filter(Boolean).filter((line) => normalize(line.split("|")[0]) !== normalize(name));
+  lines.push(`${name} | ${quantity}`);
+  el.productRecipe.value = lines.join("\n");
+  el.stockIngredientSelect.value = ""; el.stockIngredientQuantity.value = "1";
 }
 
 function renderAll() {
