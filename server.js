@@ -929,7 +929,15 @@ function readMenuItems() {
 }
 
 function writeMenuItems(items) {
-  fs.writeFileSync(MENU_ITEMS_PATH, JSON.stringify(items.map(normalizeMenuItem), null, 2));
+  writeJsonAtomic(MENU_ITEMS_PATH, items.map(normalizeMenuItem));
+}
+
+function writeJsonAtomic(filePath, value) {
+  const temporaryPath = `${filePath}.${process.pid}.tmp`;
+  const backupPath = `${filePath}.bak`;
+  if (fs.existsSync(filePath)) fs.copyFileSync(filePath, backupPath);
+  fs.writeFileSync(temporaryPath, JSON.stringify(value, null, 2));
+  fs.renameSync(temporaryPath, filePath);
 }
 
 async function handleCountRecords(request, response) {
@@ -3392,7 +3400,7 @@ function writeStockState(items, meta = {}) {
     itemCount: normalizedItems.length,
     items: normalizedItems,
   };
-  fs.writeFileSync(STOCK_STATE_PATH, JSON.stringify(state, null, 2));
+  writeJsonAtomic(STOCK_STATE_PATH, state);
   return state;
 }
 
@@ -3437,7 +3445,7 @@ function readOrderRecords() {
 }
 
 function writeOrderRecords(records) {
-  fs.writeFileSync(ORDER_RECORDS_PATH, JSON.stringify(records.slice(0, 2000), null, 2));
+  writeJsonAtomic(ORDER_RECORDS_PATH, records.slice(0, 2000));
 }
 
 function normalizeOrderRecord(record) {
