@@ -6,7 +6,7 @@
     <title>Caixa e Pedidos | Açaí Fast Food</title>
     <meta name="theme-color" content="#5a174f" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="orders.css?v=20260912-retirada-pendente" />
+    <link rel="stylesheet" href="orders.css?v=20260912-bebidas-hamburguer" />
   </head>
   <body>
     <header class="order-header">
@@ -112,6 +112,14 @@
               <label class="custom-option"><input type="radio" name="chantillyChoice" value="Sem chantilly"><span>Sem chantilly</span></label>
             </div>
           </section>
+          <section class="combo-only-group" id="hamburgerDrinkGroup" hidden>
+            <div class="custom-group-head"><div><strong>Bebida</strong><span>Escolha entre as bebidas disponíveis no menu</span></div><b>Obrigatório</b></div>
+            <div class="combo-fields hamburger-drink-fields">
+              <label>Bebida do hambúrguer
+                <select id="hamburgerDrinkOption" required><option value="">Escolher bebida</option></select>
+              </label>
+            </div>
+          </section>
           <section class="custom-option-group acai-only-group" data-group="complements" data-limit="4">
             <div class="custom-group-head"><div><strong>Complementos</strong><span>Escolha até 4</span></div><b id="complementsCount">0/4</b></div>
             <div class="custom-options" id="complementsOptions"></div>
@@ -215,6 +223,6 @@
     </section>
     <div class="toast" id="toast" hidden></div>
     <script src="menu-data.js?v=20260804-repetir-complementos"></script>
-    <script src="pedidos.js?v=20260912-retirada-pendente"></script>
+    <script src="pedidos.js?v=20260912-bebidas-hamburguer"></script>
   </body>
 </html>

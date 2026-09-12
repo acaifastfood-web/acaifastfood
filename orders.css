@@ -126,6 +126,7 @@ button { cursor: pointer; }
 .custom-option-group { border: 1px solid var(--order-line); border-radius: 12px; background: #fff; overflow: hidden; }
 .combo-only-group { border: 1px solid var(--order-line); border-radius: 12px; background: #fff; overflow: hidden; }
 .combo-fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; padding: 11px; }
+.hamburger-drink-fields { grid-template-columns: 1fr; }
 .combo-fields label { display: grid; gap: 5px; color: var(--order-muted); font-size: .7rem; font-weight: 850; }
 .combo-fields select { width: 100%; min-height: 42px; border: 1px solid var(--order-line); border-radius: 8px; background: #fff; color: var(--order-ink); padding: 7px 9px; outline: none; }
 .combo-fields select:focus { border-color: var(--order-brand); box-shadow: 0 0 0 3px rgba(90,23,79,.1); }

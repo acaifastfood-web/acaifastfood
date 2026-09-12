@@ -48,6 +48,7 @@ const elements = {
   comboDrinkOption: document.querySelector("#comboDrinkOption"), comboAcaiSizeOption: document.querySelector("#comboAcaiSizeOption"), comboQuantityNote: document.querySelector("#comboQuantityNote"),
   juiceFlavorGroup: document.querySelector("#juiceFlavorGroup"), juiceFlavorOptions: document.querySelector("#juiceFlavorOptions"), customExtraOption: document.querySelector("#customExtraOption"),
   chantillyChoiceGroup: document.querySelector("#chantillyChoiceGroup"), chantillyChoiceOptions: document.querySelector("#chantillyChoiceOptions"),
+  hamburgerDrinkGroup: document.querySelector("#hamburgerDrinkGroup"), hamburgerDrinkOption: document.querySelector("#hamburgerDrinkOption"),
   viewTableAccountButton: document.querySelector("#viewTableAccountButton"), transferTableButton: document.querySelector("#transferTableButton"),
   tableAccountDialog: document.querySelector("#tableAccountDialog"), tableAccountTitle: document.querySelector("#tableAccountTitle"), tableOrderCount: document.querySelector("#tableOrderCount"),
   tableAccountTotal: document.querySelector("#tableAccountTotal"), tableAccountOrders: document.querySelector("#tableAccountOrders"), tableAccountMessage: document.querySelector("#tableAccountMessage"),
@@ -718,17 +719,20 @@ function openProductCustomization(product) {
   const isCombo = product.category === "Combos";
   const isJuice = product.name === "Sumo natural";
   const isShake = product.category === "Batidos";
-  elements.customDialogEyebrow.textContent = isAcai ? "Personalizar Açaí" : isCombo ? "Configurar combo" : isJuice ? "Escolher sabor" : isShake ? "Configurar batido" : "Personalizar produto";
+  const isHamburger = product.category === "Hambúrgueres";
+  elements.customDialogEyebrow.textContent = isAcai ? "Personalizar Açaí" : isCombo ? "Configurar combo" : isJuice ? "Escolher sabor" : isShake ? "Configurar batido" : isHamburger ? "Configurar hambúrguer" : "Personalizar produto";
   elements.customAcaiName.textContent = `${product.name} · ${product.variant.split(" · ")[0]}`;
   elements.customAcaiPrice.textContent = money(product.price);
   elements.acaiCustomizationForm.reset();
   resetCustomizationQuantities();
   elements.comboConfiguration.hidden = !isCombo;
+  elements.hamburgerDrinkGroup.hidden = !isHamburger;
   elements.chantillyChoiceGroup.hidden = !isShake;
   elements.chantillyChoiceOptions.querySelectorAll('input[name="chantillyChoice"]').forEach((input) => { input.disabled = !isShake; });
   elements.acaiOnlyGroups.forEach((group) => { group.hidden = !(isAcai || isCombo); });
   elements.customExtraOption.hidden = isJuice || isShake;
   if (isCombo) configureCombo(product);
+  if (isHamburger) configureHamburgerDrinks();
   updateCustomizationLimits();
   elements.acaiCustomizationDialog.showModal();
 }
@@ -806,9 +810,20 @@ function customizationOptionQuantity(option) {
 }
 
 function updateJuiceFlavorVisibility(product) {
-  const showFlavors = product.name === "Sumo natural" || (product.category === "Combos" && elements.comboDrinkOption.value === "Sumo natural");
+  const hamburgerDrink = hamburgerDrinkProduct();
+  const showFlavors = product.name === "Sumo natural" || (product.category === "Combos" && elements.comboDrinkOption.value === "Sumo natural") || (product.category === "Hambúrgueres" && hamburgerDrink?.name === "Sumo natural");
   elements.juiceFlavorGroup.hidden = !showFlavors;
   elements.juiceFlavorOptions.querySelectorAll('input[name="juiceFlavor"]').forEach((input) => { input.disabled = !showFlavors; });
+}
+
+function configureHamburgerDrinks() {
+  const excluded = /cafe|meia de leite|chocolate/;
+  const drinks = menu.filter((item) => item.category === "Bebidas" && !excluded.test(normalize(item.name)) && item.stockAvailable !== false);
+  elements.hamburgerDrinkOption.innerHTML = '<option value="">Escolher bebida</option>' + drinks.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join("");
+}
+
+function hamburgerDrinkProduct() {
+  return menu.find((item) => item.id === elements.hamburgerDrinkOption.value) || null;
 }
 
 function comboMetadata(product) {
@@ -841,6 +856,16 @@ function customizationSurcharge(product) {
   surcharge += Number(drinkOption?.dataset.extraPrice || 0) * metadata.drinkCount;
   surcharge += Number(sizeOption?.dataset.extraPrice || 0) * metadata.acaiCount;
   return surcharge;
+}
+
+function buildHamburgerComponents(product, drink, juiceFlavor, note) {
+  const extraPrice = elements.customProductExtra.checked ? 1 : 0;
+  const mainModifiers = elements.customProductExtra.checked ? ["Extra (+1,00 €)"] : [];
+  const drinkCenter = drink.productionCenter || productionCenterForCategory(drink.category);
+  return [
+    { id:crypto.randomUUID(), productId:product.id, name:product.name, variant:product.variant.split(" · ")[0], productionCenter:product.productionCenter || "Cozinha", productionCenters:[product.productionCenter || "Cozinha"], quantity:1, unitPrice:product.price + extraPrice, modifiers:mainModifiers, notes:note, preservePrice:true },
+    { id:crypto.randomUUID(), productId:drink.id, name:drink.name, variant:drink.variant || "Bebida do hambúrguer", productionCenter:drinkCenter, productionCenters:[drinkCenter], quantity:1, unitPrice:0, modifiers:juiceFlavor ? [`Sabor: ${juiceFlavor}`] : [], notes:"", preservePrice:true },
+  ];
 }
 
 function buildComboComponents(product, selected, juiceFlavor, note) {
@@ -897,6 +922,10 @@ function confirmAcaiCustomization(event) {
     showToast("Escolhe se o batido é com ou sem chantilly.");
     return;
   }
+  if (product.category === "Hambúrgueres" && !hamburgerDrinkProduct()) {
+    showToast("Escolhe a bebida do hambúrguer.");
+    return;
+  }
   const selected = {};
   for (const group of Object.keys(acaiCustomization)) {
     selected[group] = selectedCustomizationValues(group);
@@ -916,14 +945,17 @@ function confirmAcaiCustomization(event) {
   }
   if (product.name === "Sumo natural") modifiers.push(`Sabor: ${juiceFlavor}`);
   if (product.category === "Batidos") modifiers.push(`Chantilly: ${chantillyChoice}`);
+  const hamburgerDrink = product.category === "Hambúrgueres" ? hamburgerDrinkProduct() : null;
+  if (hamburgerDrink) modifiers.push(`Bebida: ${hamburgerDrink.name}${juiceFlavor ? ` - ${juiceFlavor}` : ""}`);
   if (elements.customProductExtra.checked) modifiers.push("Extra (+1,00 €)");
   const center = product.productionCenter || productionCenterForCategory(product.category);
   const note = elements.customProductComment.value.trim();
-  const components = product.category === "Combos" ? buildComboComponents(product, selected, juiceFlavor, note) : [];
+  const components = product.category === "Combos" ? buildComboComponents(product, selected, juiceFlavor, note) : hamburgerDrink ? buildHamburgerComponents(product, hamburgerDrink, juiceFlavor, note) : [];
   const comboCenters = elements.comboDrinkOption.value === "Sumo natural" ? ["Cozinha", "Açaí"] : ["Cozinha", "Balcão", "Açaí"];
+  const hamburgerCenters = hamburgerDrink ? [...new Set([center, hamburgerDrink.productionCenter || productionCenterForCategory(hamburgerDrink.category)])] : [center];
   cart.push({
     id: crypto.randomUUID(), productId: product.id, name: product.name, variant: product.variant.split(" · ")[0],
-    productionCenter: center, productionCenters: product.category === "Combos" ? comboCenters : [center], modifiers, notes: note, components, quantity: 1,
+    productionCenter: center, productionCenters: product.category === "Combos" ? comboCenters : hamburgerCenters, modifiers, notes: note, components, quantity: 1,
     unitPrice: product.price + customizationSurcharge(product),
   });
   closeAcaiCustomization(); renderCart(); showToast(`${product.name} personalizado e adicionado`);

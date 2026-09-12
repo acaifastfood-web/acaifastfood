@@ -3658,6 +3658,7 @@ function expandComboItems(items) {
     if (!Array.isArray(item.components) || !item.components.length) return [item];
     const parentQuantity = Math.min(99, Math.max(1, Math.round(Number(item.quantity || 1))));
     const parentUnitPrice = roundMoney(Math.max(0, Number(item.unitPrice || 0)));
+    const preserveComponentPrices = item.components.every((component) => component?.preservePrice === true);
     return item.components.map((component, index) => {
       const componentQuantity = Math.min(99, Math.max(1, Math.round(Number(component.quantity || 1))));
       return {
@@ -3666,7 +3667,7 @@ function expandComboItems(items) {
         productId: String(component.productId || `${item.productId || "combo"}-component-${index + 1}`),
         variant: String(component.variant || item.name || "Combo"),
         quantity: Math.min(99, parentQuantity * componentQuantity),
-        unitPrice: index === 0 ? roundMoney(parentUnitPrice / componentQuantity) : 0,
+        unitPrice: preserveComponentPrices ? roundMoney(Math.max(0, Number(component.unitPrice || 0))) : index === 0 ? roundMoney(parentUnitPrice / componentQuantity) : 0,
         notes: String(component.notes || item.notes || ""),
       };
     });
