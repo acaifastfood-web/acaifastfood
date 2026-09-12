@@ -17,6 +17,7 @@ let tableOrders = [];
 let selectedPaymentItems = new Set();
 let customizingProductId = "";
 let fulfillmentOrders = [];
+let activeFulfillmentPaymentOrderId = "";
 const customizableCategories = new Set(["Açaí", "Pastéis", "Combos", "Hambúrgueres", "Tapiocas", "Batidos"]);
 
 const acaiCustomization = {
@@ -64,6 +65,10 @@ const elements = {
   fulfillmentSearch: document.querySelector("#fulfillmentSearch"), fulfillmentChannelFilter: document.querySelector("#fulfillmentChannelFilter"), fulfillmentStatusFilter: document.querySelector("#fulfillmentStatusFilter"),
   refreshFulfillmentOrdersButton: document.querySelector("#refreshFulfillmentOrdersButton"), fulfillmentSummary: document.querySelector("#fulfillmentSummary"), fulfillmentOrdersList: document.querySelector("#fulfillmentOrdersList"), fulfillmentOrdersMessage: document.querySelector("#fulfillmentOrdersMessage"),
   printTableAccountButton: document.querySelector("#printTableAccountButton"),
+  fulfillmentPaymentDialog: document.querySelector("#fulfillmentPaymentDialog"), fulfillmentPaymentTitle: document.querySelector("#fulfillmentPaymentTitle"), fulfillmentPaymentTotal: document.querySelector("#fulfillmentPaymentTotal"),
+  fulfillmentPaymentMethod: document.querySelector("#fulfillmentPaymentMethod"), fulfillmentCashReceivedField: document.querySelector("#fulfillmentCashReceivedField"), fulfillmentCashReceived: document.querySelector("#fulfillmentCashReceived"),
+  fulfillmentPaymentChange: document.querySelector("#fulfillmentPaymentChange"), fulfillmentPaymentChangeAmount: document.querySelector("#fulfillmentPaymentChangeAmount"), fulfillmentPaymentMessage: document.querySelector("#fulfillmentPaymentMessage"),
+  closeFulfillmentPaymentButton: document.querySelector("#closeFulfillmentPaymentButton"), cancelFulfillmentPaymentButton: document.querySelector("#cancelFulfillmentPaymentButton"), confirmFulfillmentPaymentButton: document.querySelector("#confirmFulfillmentPaymentButton"),
 };
 
 elements.loginForm.addEventListener("submit", login);
@@ -111,6 +116,11 @@ elements.fulfillmentSearch.addEventListener("input", renderFulfillmentOrders);
 elements.fulfillmentChannelFilter.addEventListener("change", renderFulfillmentOrders);
 elements.fulfillmentStatusFilter.addEventListener("change", renderFulfillmentOrders);
 elements.fulfillmentOrdersList.addEventListener("click", handleFulfillmentOrderAction);
+elements.fulfillmentPaymentMethod.addEventListener("change", updateFulfillmentPayment);
+elements.fulfillmentCashReceived.addEventListener("input", updateFulfillmentPayment);
+elements.closeFulfillmentPaymentButton.addEventListener("click", closeFulfillmentPayment);
+elements.cancelFulfillmentPaymentButton.addEventListener("click", closeFulfillmentPayment);
+elements.confirmFulfillmentPaymentButton.addEventListener("click", confirmFulfillmentPayment);
 elements.orderChannel.addEventListener("change", updateDeliveryFields);
 elements.paymentMethod.addEventListener("change", updateDeliveryFields);
 elements.deliveryNeedsChange.addEventListener("change", updateDeliveryFields);
@@ -152,7 +162,7 @@ async function loadStoreConfig() {
 function applyStoreConfig() {
   const labels = { cash:"DINHEIRO", multibanco:"MULTIBANCO", mbway:"MB WAY", account:"CONTA" };
   const methods = storeConfig.paymentMethods?.length ? storeConfig.paymentMethods : Object.keys(labels);
-  for (const select of [elements.paymentMethod, elements.tablePaymentMethod]) {
+  for (const select of [elements.paymentMethod, elements.tablePaymentMethod, elements.fulfillmentPaymentMethod]) {
     const previous = select.value;
     select.innerHTML = methods.map((method) => `<option value="${method}">${labels[method]}</option>`).join("");
     if (methods.includes(previous)) select.value = previous;
@@ -232,7 +242,7 @@ function setServiceMode(mode, orderChannel = "") {
   });
   elements.tablesPanel.hidden = serviceMode !== "tables";
   elements.orderChannelField.hidden = true;
-  elements.paymentMethodField.hidden = serviceMode === "tables";
+  elements.paymentMethodField.hidden = serviceMode === "tables" || (serviceMode === "counter" && elements.orderChannel.value === "takeaway");
   elements.orderTableField.hidden = !serviceMode;
   elements.orderTable.readOnly = serviceMode === "tables";
   if (serviceMode === "tables") {
@@ -264,7 +274,7 @@ function serviceIsReady() {
 
 function updateDeliveryFields() {
   const isDelivery = serviceMode === "counter" && elements.orderChannel.value === "delivery";
-  const isCounterCash = serviceMode === "counter" && elements.paymentMethod.value === "cash";
+  const isCounterCash = serviceMode === "counter" && elements.orderChannel.value !== "takeaway" && elements.paymentMethod.value === "cash";
   const isCashDelivery = isDelivery && isCounterCash;
   const needsChange = isCashDelivery && elements.deliveryNeedsChange.value === "yes";
   const needsCashAmount = isCounterCash && (!isDelivery || needsChange);
@@ -292,7 +302,7 @@ function updateServiceGate() {
       : `Mesa ${selectedTable} selecionada. Pode iniciar o pedido.`;
   }
   else if (serviceMode === "counter" && elements.orderChannel.value === "delivery") elements.serviceRequiredMessage.textContent = "Entrega selecionada. Preencha os dados e inicie o pedido.";
-  else if (serviceMode === "counter") elements.serviceRequiredMessage.textContent = "Retirada selecionada. Pode iniciar o pedido.";
+  else if (serviceMode === "counter") elements.serviceRequiredMessage.textContent = "Retirada selecionada. O pagamento será recebido quando o cliente chegar.";
   else elements.serviceRequiredMessage.textContent = "Selecione Mesa, Retirada ou Entrega antes de iniciar o pedido.";
 }
 
@@ -457,7 +467,12 @@ function fulfillmentOrderHtml(order) {
   const statusLabel = { new:"Novo", preparing:"Em preparação", ready:"Pronto", delivered:"Concluído", cancelled:"Cancelado" }[order.status] || "Pendente";
   const details = order.channel === "delivery" ? [order.deliveryAddress, order.deliveryPhone].filter(Boolean).join(" · ") : (order.customerName || "Retirada no local");
   const items = (order.items || []).filter((item) => item.itemStatus !== "cancelled").map((item) => `${item.quantity}× ${escapeHtml(item.name)}`).join(" · ");
-  return `<article class="fulfillment-order channel-${order.channel} status-${order.status}" data-order-id="${order.id}"><div class="fulfillment-order-head"><div><strong>#${order.number}</strong><span>${channelLabel}</span><b>${statusLabel}</b></div><time>${formatOrderTime(order.createdAt)}</time></div><p>${escapeHtml(details)}</p><small>${items}</small><div class="fulfillment-order-total"><strong>${money(order.total)}</strong><span>${paymentMethodLabel(order.paymentMethod) || "Pagamento pendente"}</span></div><div class="fulfillment-order-actions"><button data-fulfillment-action="print" type="button">Imprimir conta</button>${!["delivered", "cancelled"].includes(order.status) ? '<button class="complete-fulfillment" data-fulfillment-action="complete" type="button">Dar baixa</button>' : ""}</div></article>`;
+  const pendingPayment = order.paymentStatus !== "paid";
+  const paymentText = pendingPayment ? "Pagamento pendente" : `Pago · ${paymentMethodLabel(order.paymentMethod)}`;
+  const active = !["delivered", "cancelled"].includes(order.status);
+  const paymentAction = active && order.channel === "takeaway" && pendingPayment ? '<button class="pay-fulfillment" data-fulfillment-action="pay" type="button">Receber pagamento</button>' : "";
+  const completeAction = active && (!pendingPayment || order.channel !== "takeaway") ? '<button class="complete-fulfillment" data-fulfillment-action="complete" type="button">Dar baixa</button>' : "";
+  return `<article class="fulfillment-order channel-${order.channel} status-${order.status}${pendingPayment ? " payment-pending" : ""}" data-order-id="${order.id}"><div class="fulfillment-order-head"><div><strong>#${order.number}</strong><span>${channelLabel}</span><b>${statusLabel}</b></div><time>${formatOrderTime(order.createdAt)}</time></div><p>${escapeHtml(details)}</p><small>${items}</small><div class="fulfillment-order-total"><strong>${money(order.total)}</strong><span>${paymentText}</span></div><div class="fulfillment-order-actions"><button data-fulfillment-action="print" type="button">Imprimir conta</button>${paymentAction}${completeAction}</div></article>`;
 }
 
 async function handleFulfillmentOrderAction(event) {
@@ -466,6 +481,7 @@ async function handleFulfillmentOrderAction(event) {
   const order = fulfillmentOrders.find((entry) => entry.id === button.closest("[data-order-id]")?.dataset.orderId);
   if (!order) return;
   if (button.dataset.fulfillmentAction === "print") return printFulfillmentOrder(order);
+  if (button.dataset.fulfillmentAction === "pay") return openFulfillmentPayment(order);
   if (!confirm(`Dar baixa no pedido #${order.number} como concluído?`)) return;
   button.disabled = true;
   elements.fulfillmentOrdersMessage.textContent = `A concluir o pedido #${order.number}…`;
@@ -476,6 +492,52 @@ async function handleFulfillmentOrderAction(event) {
     elements.fulfillmentOrdersMessage.textContent = `Pedido #${order.number} concluído.`;
     showToast(`Pedido #${order.number} concluído`);
   } catch (error) { elements.fulfillmentOrdersMessage.textContent = error.message; }
+}
+
+function openFulfillmentPayment(order) {
+  activeFulfillmentPaymentOrderId = order.id;
+  elements.fulfillmentPaymentTitle.textContent = `Retirada #${order.number}`;
+  elements.fulfillmentPaymentTotal.textContent = money(order.total);
+  elements.fulfillmentPaymentMethod.value = elements.fulfillmentPaymentMethod.options[0]?.value || "cash";
+  elements.fulfillmentCashReceived.value = "";
+  elements.fulfillmentPaymentMessage.textContent = "";
+  updateFulfillmentPayment();
+  if (!elements.fulfillmentPaymentDialog.open) elements.fulfillmentPaymentDialog.showModal();
+}
+
+function closeFulfillmentPayment() {
+  activeFulfillmentPaymentOrderId = "";
+  if (elements.fulfillmentPaymentDialog.open) elements.fulfillmentPaymentDialog.close();
+}
+
+function updateFulfillmentPayment() {
+  const order = fulfillmentOrders.find((entry) => entry.id === activeFulfillmentPaymentOrderId);
+  const isCash = elements.fulfillmentPaymentMethod.value === "cash";
+  const received = Number(elements.fulfillmentCashReceived.value || 0);
+  const total = Number(order?.total || 0);
+  elements.fulfillmentCashReceivedField.hidden = !isCash;
+  elements.fulfillmentPaymentChange.hidden = !isCash;
+  elements.fulfillmentPaymentChangeAmount.textContent = money(Math.max(0, received - total));
+  elements.confirmFulfillmentPaymentButton.disabled = !order || (isCash && received < total);
+}
+
+async function confirmFulfillmentPayment() {
+  const order = fulfillmentOrders.find((entry) => entry.id === activeFulfillmentPaymentOrderId);
+  if (!order) return closeFulfillmentPayment();
+  const paymentMethod = elements.fulfillmentPaymentMethod.value;
+  const cashReceived = paymentMethod === "cash" ? Number(elements.fulfillmentCashReceived.value || 0) : 0;
+  elements.confirmFulfillmentPaymentButton.disabled = true;
+  elements.fulfillmentPaymentMessage.textContent = "A registar pagamento…";
+  try {
+    const result = await api("/api/orders/pay", { authToken: auth.token, orderId: order.id, paymentMethod, cashReceived });
+    fulfillmentOrders = fulfillmentOrders.map((entry) => entry.id === order.id ? result.order : entry);
+    closeFulfillmentPayment();
+    renderFulfillmentOrders();
+    showToast(result.order.changeDue > 0 ? `Pagamento recebido · Troco ${money(result.order.changeDue)}` : "Pagamento recebido");
+  } catch (error) {
+    elements.fulfillmentPaymentMessage.textContent = error.message;
+    updateFulfillmentPayment();
+  }
 }
 
 function printFulfillmentOrder(order) {
@@ -917,7 +979,8 @@ async function sendOrder() {
   sending = true; renderCart(); setStatus(elements.orderStatus, "A enviar para a cozinha…");
   try {
     const total = cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-    const paymentMethod = serviceMode === "tables" ? "" : elements.paymentMethod.value;
+    const isTakeaway = serviceMode === "counter" && elements.orderChannel.value === "takeaway";
+    const paymentMethod = serviceMode === "tables" || isTakeaway ? "" : elements.paymentMethod.value;
     const isDelivery = serviceMode === "counter" && elements.orderChannel.value === "delivery";
     const deliveryAddress = elements.deliveryAddress.value.trim();
     const deliveryPhone = elements.deliveryPhone.value.trim();
@@ -933,7 +996,7 @@ async function sendOrder() {
       cashReceived = Number(elements.deliveryCashAmount.value || 0);
       if (!Number.isFinite(cashReceived) || cashReceived < total) { setStatus(elements.orderStatus, "Indica um valor recebido igual ou superior ao total do pedido.", "error"); elements.deliveryCashAmount.focus(); return; }
     }
-    if (serviceMode !== "tables") {
+    if (serviceMode !== "tables" && !isTakeaway) {
       receiptWindow = window.open("", "_blank", "width=420,height=760");
       if (receiptWindow) writeReceiptLoading(receiptWindow);
     }
@@ -962,7 +1025,7 @@ async function sendOrder() {
     elements.deliveryAddress.value = ""; elements.deliveryPhone.value = ""; elements.deliveryNeedsChange.value = "no"; elements.deliveryCashAmount.value = "";
     elements.orderTable.value = "";
     setServiceMode(""); renderCart(); setStatus(elements.orderStatus, `Pedido #${number} enviado. Selecione o próximo atendimento.`, "success");
-    showToast(result.order.paymentMethod === "cash" ? `Pedido #${number} · Troco ${money(result.order.changeDue)}` : `Pedido #${number} entrou na cozinha`);
+    showToast(isTakeaway ? `Pedido #${number} pendente · pagamento na chegada` : result.order.paymentMethod === "cash" ? `Pedido #${number} · Troco ${money(result.order.changeDue)}` : `Pedido #${number} entrou na cozinha`);
     loadTableStatus(); renderTables();
   } catch (error) {
     if (receiptWindow) receiptWindow.close();

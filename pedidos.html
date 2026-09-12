@@ -6,7 +6,7 @@
     <title>Caixa e Pedidos | Açaí Fast Food</title>
     <meta name="theme-color" content="#5a174f" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="orders.css?v=20260912-caixa-moderno" />
+    <link rel="stylesheet" href="orders.css?v=20260912-retirada-pendente" />
   </head>
   <body>
     <header class="order-header">
@@ -188,6 +188,18 @@
       <footer><span>Pedidos do dia atual</span><button id="closeFulfillmentOrdersFooterButton" type="button">Voltar ao Caixa</button></footer>
     </dialog>
 
+    <dialog class="fulfillment-payment-dialog" id="fulfillmentPaymentDialog">
+      <header><div><span>Pagamento na chegada</span><strong id="fulfillmentPaymentTitle">Retirada #0</strong></div><button id="closeFulfillmentPaymentButton" type="button" aria-label="Fechar">×</button></header>
+      <div class="fulfillment-payment-body">
+        <div class="fulfillment-payment-total"><span>Total a receber</span><strong id="fulfillmentPaymentTotal">0,00 €</strong></div>
+        <label>Forma de pagamento<select id="fulfillmentPaymentMethod"><option value="cash">DINHEIRO</option><option value="multibanco">MULTIBANCO</option><option value="mbway">MB WAY</option><option value="account">CONTA</option></select></label>
+        <label id="fulfillmentCashReceivedField">Valor recebido<div class="cash-payment-input"><input id="fulfillmentCashReceived" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00" /><span>€</span></div></label>
+        <div class="fulfillment-payment-change" id="fulfillmentPaymentChange"><span>Troco</span><strong id="fulfillmentPaymentChangeAmount">0,00 €</strong></div>
+      </div>
+      <p class="dialog-message" id="fulfillmentPaymentMessage"></p>
+      <footer><button id="cancelFulfillmentPaymentButton" type="button">Voltar</button><button class="confirm-fulfillment-payment" id="confirmFulfillmentPaymentButton" type="button">Receber pagamento</button></footer>
+    </dialog>
+
     <section class="auth-screen" id="authScreen">
       <form class="auth-card auth-form" id="loginForm">
         <img src="logo-acai.png" alt="Açaí Fast Food" />
@@ -203,6 +215,6 @@
     </section>
     <div class="toast" id="toast" hidden></div>
     <script src="menu-data.js?v=20260804-repetir-complementos"></script>
-    <script src="pedidos.js?v=20260912-pagamento-caixa"></script>
+    <script src="pedidos.js?v=20260912-retirada-pendente"></script>
   </body>
 </html>

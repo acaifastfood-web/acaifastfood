@@ -268,6 +268,10 @@ http
         return await handleOrderStatus(request, response);
       }
 
+      if (requestPath === "/api/orders/pay" && request.method === "POST") {
+        return await handleOrderPayment(request, response);
+      }
+
       if (requestPath === "/api/orders/items" && request.method === "POST") {
         return await handleOrderItems(request, response);
       }
@@ -483,15 +487,16 @@ async function handleCreateOrder(request, response) {
   const deliveryPhone = String(body.deliveryPhone || "").trim().slice(0, 30);
   if (isDelivery && !deliveryAddress) return sendJson(response, 400, { error: "Indica a morada da entrega." });
   if (isDelivery && !deliveryPhone) return sendJson(response, 400, { error: "Indica o telefone da entrega." });
-  const paymentMethod = tableNumber ? "" : normalizePaymentMethod(body.paymentMethod);
+  const isTakeaway = channel === "takeaway";
+  const paymentMethod = tableNumber || isTakeaway ? "" : normalizePaymentMethod(body.paymentMethod);
   const orderTotal = roundMoney(items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0));
   const storeConfig = readStoreConfig();
   if (!tableNumber && orderTotal < storeConfig.minimumOrder) return sendJson(response, 400, { error: `O pedido mínimo para retirada ou entrega é ${storeConfig.minimumOrder.toFixed(2).replace(".", ",")} €.` });
   if (channel === "delivery" && !storeConfig.deliveryEnabled) return sendJson(response, 400, { error: "As entregas estão temporariamente desativadas." });
   if (channel === "takeaway" && !storeConfig.pickupEnabled) return sendJson(response, 400, { error: "A retirada no local está temporariamente desativada." });
-  if (!tableNumber && !storeConfig.paymentMethods.includes(paymentMethod)) return sendJson(response, 400, { error: "Esta forma de pagamento não está disponível." });
+  if (!tableNumber && !isTakeaway && !storeConfig.paymentMethods.includes(paymentMethod)) return sendJson(response, 400, { error: "Esta forma de pagamento não está disponível." });
   const cashReceived = paymentMethod === "cash" ? moneyValue(body.cashReceived) : 0;
-  if (!tableNumber && !paymentMethod) return sendJson(response, 400, { error: "Escolhe a forma de pagamento." });
+  if (!tableNumber && !isTakeaway && !paymentMethod) return sendJson(response, 400, { error: "Escolhe a forma de pagamento." });
   if (paymentMethod === "cash" && cashReceived < orderTotal) return sendJson(response, 400, { error: "O valor recebido em dinheiro e inferior ao total do pedido." });
   const stockConsumption = consumeOrderStock(items);
   if (stockConsumption.error) return sendJson(response, 409, { error: stockConsumption.error });
@@ -507,7 +512,7 @@ async function handleCreateOrder(request, response) {
     customerName: String(body.customerName || "").trim().slice(0, 80),
     table: String(body.table || "").trim().slice(0, 30),
     notes: String(body.notes || "").trim().slice(0, 500),
-    paymentStatus: tableNumber || isDelivery ? "pending" : "paid",
+    paymentStatus: tableNumber || isDelivery || isTakeaway ? "pending" : "paid",
     paymentMethod,
     cashReceived,
     changeDue: paymentMethod === "cash" ? roundMoney(cashReceived - orderTotal) : 0,
@@ -522,7 +527,7 @@ async function handleCreateOrder(request, response) {
     updatedAt: now,
     statusHistory: [{ status: "new", label: "Novo", by: session.name, at: now }],
   });
-  if (!tableNumber) order.items.forEach((item) => { item.paidQuantity = item.quantity; });
+  if (!tableNumber && !isTakeaway) order.items.forEach((item) => { item.paidQuantity = item.quantity; });
   orders.unshift(order);
   writeOrderRecords(orders);
   return sendJson(response, 201, { order });
@@ -539,6 +544,7 @@ async function handleOrderStatus(request, response) {
   const order = orders.find((entry) => entry.id === String(body.orderId || ""));
   if (!order) return sendJson(response, 404, { error: "Pedido nao encontrado." });
   if (order.status === "cancelled") return sendJson(response, 409, { error: "O pedido esta cancelado." });
+  if (status === "delivered" && order.channel === "takeaway" && order.paymentStatus !== "paid") return sendJson(response, 409, { error: "Recebe o pagamento antes de concluir a retirada." });
 
   const now = new Date().toISOString();
   order.status = status;
@@ -549,6 +555,37 @@ async function handleOrderStatus(request, response) {
     });
   }
   order.statusHistory.push({ status, label: orderStatusLabel(status), by: session.name, at: now });
+  writeOrderRecords(orders);
+  return sendJson(response, 200, { order });
+}
+
+async function handleOrderPayment(request, response) {
+  const body = await readJson(request);
+  const session = getSession(body.authToken);
+  if (!session) return sendJson(response, 401, { error: "Sessao expirada. Faz login novamente." });
+
+  const orders = readOrderRecords();
+  const order = orders.find((entry) => entry.id === String(body.orderId || ""));
+  if (!order) return sendJson(response, 404, { error: "Pedido nao encontrado." });
+  if (order.table) return sendJson(response, 400, { error: "Utiliza o pagamento de mesas para este pedido." });
+  if (order.status === "cancelled") return sendJson(response, 409, { error: "O pedido esta cancelado." });
+  if (order.paymentStatus === "paid") return sendJson(response, 409, { error: "Este pedido ja esta pago." });
+
+  const storeConfig = readStoreConfig();
+  const paymentMethod = normalizePaymentMethod(body.paymentMethod);
+  if (!paymentMethod || !storeConfig.paymentMethods.includes(paymentMethod)) return sendJson(response, 400, { error: "Escolhe uma forma de pagamento valida." });
+  const cashReceived = paymentMethod === "cash" ? moneyValue(body.cashReceived) : 0;
+  if (paymentMethod === "cash" && cashReceived < order.total) return sendJson(response, 400, { error: "O valor recebido em dinheiro e inferior ao total do pedido." });
+
+  const now = new Date().toISOString();
+  order.paymentStatus = "paid";
+  order.paymentMethod = paymentMethod;
+  order.cashReceived = cashReceived;
+  order.changeDue = paymentMethod === "cash" ? roundMoney(cashReceived - order.total) : 0;
+  order.items.forEach((item) => { if (item.itemStatus !== "cancelled") item.paidQuantity = item.quantity; });
+  order.updatedAt = now;
+  order.payments.push({ id: crypto.randomUUID(), method: paymentMethod, total: order.total, cashReceived, changeDue: order.changeDue, paidAt: now, paidBy: session.name, itemIds: order.items.map((item) => item.id) });
+  order.statusHistory.push({ status: order.status, label: `Pagamento recebido em ${paymentMethodLabel(paymentMethod)}`, by: session.name, at: now });
   writeOrderRecords(orders);
   return sendJson(response, 200, { order });
 }
